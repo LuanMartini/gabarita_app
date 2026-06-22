@@ -13,6 +13,7 @@ dependencies:
   # ── Base de dados local ─────────────────────────────────
   sqflite: ^2.3.3
   path: ^1.9.0
+  http: ^1.2.2
 
   # ── Hardware ────────────────────────────────────────────
   sensors_plus: ^5.0.1 # Acelerômetro (Modo Foco)
@@ -41,7 +42,7 @@ dependencies:
   uuid: ^4.4.2 # Geração de UUIDs para sessões
 
   cupertino_icons: ^1.0.8
-
+  flutter_markdown_plus: ^1.0.7
 dev_dependencies:
   flutter_test:
     sdk: flutter

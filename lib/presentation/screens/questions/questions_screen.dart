@@ -1,4 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+
+import '../../../domain/entities/question.dart';
+import '../../providers/questions_provider.dart';
 
 class QuestionsScreen extends StatefulWidget {
   const QuestionsScreen({super.key});
@@ -9,34 +13,17 @@ class QuestionsScreen extends StatefulWidget {
 
 class _QuestionsScreenState extends State<QuestionsScreen> {
   final TextEditingController _searchController = TextEditingController();
+
   final List<String> _filters = const [
     'Todas',
     'Matematica',
+    'Linguagens',
+    'Ciencias Humanas',
+    'Ciencias da Natureza',
     'Portugues',
+    'Fisica',
+    'Quimica',
     'Biologia',
-    'Historia',
-    'ENEM',
-    'Favoritas',
-  ];
-  final List<_QuestionPreview> _questions = const [
-    _QuestionPreview(
-      subject: 'Matematica',
-      title: 'Equacao do segundo grau',
-      subtitle: 'Funcoes e raizes reais',
-      difficulty: 'Facil',
-    ),
-    _QuestionPreview(
-      subject: 'Biologia',
-      title: 'Organela produtora de ATP',
-      subtitle: 'Citologia e metabolismo celular',
-      difficulty: 'Facil',
-    ),
-    _QuestionPreview(
-      subject: 'Portugues',
-      title: 'Figura de linguagem',
-      subtitle: 'Metafora em texto literario',
-      difficulty: 'Media',
-    ),
   ];
 
   String _selectedFilter = 'Todas';
@@ -49,149 +36,279 @@ class _QuestionsScreenState extends State<QuestionsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.black,
-      body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.fromLTRB(18, 18, 18, 28),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                'Banco de questoes',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 27,
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
-              const SizedBox(height: 14),
-              TextField(
-                controller: _searchController,
-                style: const TextStyle(color: Colors.white),
-                decoration: InputDecoration(
-                  hintText: 'Buscar por assunto, banca ou palavra-chave',
-                  hintStyle: const TextStyle(color: Color(0xFF6F7D90)),
-                  filled: true,
-                  fillColor: const Color(0xFF0E131B),
-                  prefixIcon: const Icon(
-                    Icons.search,
-                    color: Color(0xFF6F7D90),
-                  ),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(8),
-                    borderSide: BorderSide.none,
-                  ),
-                ),
-                onChanged: (_) {
-                  setState(() {});
-                },
-              ),
-              const SizedBox(height: 14),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: _filters.map((filter) {
-                  final selected = filter == _selectedFilter;
-                  return ChoiceChip(
-                    label: Text(filter),
-                    selected: selected,
-                    selectedColor: const Color(0xFF4DA3FF),
-                    backgroundColor: const Color(0xFF0E131B),
-                    labelStyle: TextStyle(
-                      color:
-                          selected ? Colors.white : const Color(0xFFB6C2D1),
-                      fontWeight: FontWeight.w700,
+    return Consumer<QuestionsProvider>(
+      builder: (context, provider, _) {
+        final questions = provider.questions;
+
+        return Scaffold(
+          backgroundColor: Colors.black,
+          body: SafeArea(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(18, 18, 18, 28),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Banco de questoes',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 27,
+                      fontWeight: FontWeight.w800,
                     ),
-                    side: BorderSide(
-                      color: selected
-                          ? const Color(0xFF4DA3FF)
-                          : const Color(0xFF26364A),
+                  ),
+                  const SizedBox(height: 14),
+                  TextField(
+                    controller: _searchController,
+                    style: const TextStyle(color: Colors.white),
+                    decoration: InputDecoration(
+                      hintText: 'Buscar por assunto, banca ou palavra-chave',
+                      hintStyle: const TextStyle(color: Color(0xFF6F7D90)),
+                      filled: true,
+                      fillColor: const Color(0xFF0E131B),
+                      prefixIcon: const Icon(
+                        Icons.search,
+                        color: Color(0xFF6F7D90),
+                      ),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        borderSide: BorderSide.none,
+                      ),
                     ),
-                    onSelected: (_) {
-                      setState(() {
-                        _selectedFilter = filter;
-                      });
+                    onSubmitted: provider.setSearchText,
+                  ),
+                  const SizedBox(height: 14),
+                  _EnemSyncCard(provider: provider),
+                  const SizedBox(height: 14),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: _filters.map((filter) {
+                      final selected = filter == _selectedFilter;
+                      return ChoiceChip(
+                        label: Text(filter),
+                        selected: selected,
+                        selectedColor: const Color(0xFF4DA3FF),
+                        backgroundColor: const Color(0xFF0E131B),
+                        labelStyle: TextStyle(
+                          color:
+                              selected ? Colors.white : const Color(0xFFB6C2D1),
+                          fontWeight: FontWeight.w700,
+                        ),
+                        side: BorderSide(
+                          color: selected
+                              ? const Color(0xFF4DA3FF)
+                              : const Color(0xFF26364A),
+                        ),
+                        onSelected: (_) {
+                          setState(() {
+                            _selectedFilter = filter;
+                          });
+                          provider.setSingleSubjectFilter(filter);
+                        },
+                      );
+                    }).toList(),
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    provider.isLoading
+                        ? 'Carregando questoes...'
+                        : '${questions.length} questoes encontradas',
+                    style: const TextStyle(color: Color(0xFF9BAABD)),
+                  ),
+                  if (provider.errorMessage != null) ...[
+                    const SizedBox(height: 10),
+                    Text(
+                      provider.errorMessage!,
+                      style: const TextStyle(color: Color(0xFFEF4444)),
+                    ),
+                  ],
+                  const SizedBox(height: 18),
+                  ListView.builder(
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    itemCount: questions.length,
+                    itemBuilder: (context, index) {
+                      final question = questions[index];
+                      return _QuestionCard(
+                        question: question,
+                        onFavorite: () => provider.toggleFavorite(question),
+                      );
                     },
-                  );
-                }).toList(),
+                  ),
+                ],
               ),
-              const SizedBox(height: 18),
-              ListView.builder(
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                itemCount: _visibleQuestions.length,
-                itemBuilder: (context, index) {
-                  final question = _visibleQuestions[index];
-                  return Card(
-                    margin: const EdgeInsets.only(bottom: 12),
-                    child: ListTile(
-                      contentPadding: const EdgeInsets.all(16),
-                      title: Text(
-                        question.title,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 16,
-                          fontWeight: FontWeight.w800,
-                        ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _EnemSyncCard extends StatelessWidget {
+  const _EnemSyncCard({required this.provider});
+
+  final QuestionsProvider provider;
+
+  @override
+  Widget build(BuildContext context) {
+    final exams = provider.availableEnemExams;
+    final selectedYear = provider.selectedEnemYear ?? 2023;
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Questões reais do ENEM',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 16,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+            const SizedBox(height: 10),
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                children: (exams.isEmpty
+                        ? const [2023, 2022, 2021]
+                        : exams.map((exam) => exam.year).take(6).toList())
+                    .map((year) {
+                  final selected = year == selectedYear;
+                  return Padding(
+                    padding: const EdgeInsets.only(right: 8),
+                    child: ChoiceChip(
+                      label: Text(year.toString()),
+                      selected: selected,
+                      selectedColor: const Color(0xFF4DA3FF),
+                      backgroundColor: const Color(0xFF141D29),
+                      labelStyle: TextStyle(
+                        color:
+                            selected ? Colors.white : const Color(0xFFB6C2D1),
+                        fontWeight: FontWeight.w700,
                       ),
-                      subtitle: Padding(
-                        padding: const EdgeInsets.only(top: 8),
-                        child: Text(
-                          '${question.subject} - ${question.subtitle}',
-                          style: const TextStyle(
-                            color: Color(0xFF9BAABD),
-                            height: 1.3,
-                          ),
-                        ),
-                      ),
-                      trailing: Text(
-                        question.difficulty,
-                        style: const TextStyle(
-                          color: Color(0xFF4DA3FF),
-                          fontWeight: FontWeight.w800,
-                        ),
-                      ),
-                      onTap: () {
-                        Navigator.of(context).pushNamed('/answer');
+                      onSelected: (_) {
+                        provider.setSelectedEnemYear(year);
                       },
                     ),
                   );
-                },
+                }).toList(),
+              ),
+            ),
+            const SizedBox(height: 12),
+            ElevatedButton.icon(
+              onPressed: provider.isSyncingEnem
+                  ? null
+                  : () => provider.syncSelectedEnemExam(limit: 60),
+              icon: provider.isSyncingEnem
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.cloud_download_outlined),
+              label: Text(
+                provider.isSyncingEnem
+                    ? 'Sincronizando...'
+                    : 'Sincronizar ENEM $selectedYear',
+              ),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF4DA3FF),
+                foregroundColor: Colors.white,
+                minimumSize: const Size(double.infinity, 46),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+              ),
+            ),
+            if (provider.syncMessage != null) ...[
+              const SizedBox(height: 10),
+              Text(
+                provider.syncMessage!,
+                style: const TextStyle(color: Color(0xFF9BAABD)),
               ),
             ],
-          ),
+          ],
         ),
       ),
     );
   }
-
-  List<_QuestionPreview> get _visibleQuestions {
-    final query = _searchController.text.trim().toLowerCase();
-    return _questions.where((question) {
-      final matchesFilter = _selectedFilter == 'Todas' ||
-          question.subject == _selectedFilter ||
-          _selectedFilter == 'ENEM' ||
-          _selectedFilter == 'Favoritas';
-      final matchesQuery = query.isEmpty ||
-          question.title.toLowerCase().contains(query) ||
-          question.subject.toLowerCase().contains(query) ||
-          question.subtitle.toLowerCase().contains(query);
-      return matchesFilter && matchesQuery;
-    }).toList();
-  }
 }
 
-class _QuestionPreview {
-  const _QuestionPreview({
-    required this.subject,
-    required this.title,
-    required this.subtitle,
-    required this.difficulty,
+class _QuestionCard extends StatelessWidget {
+  const _QuestionCard({
+    required this.question,
+    required this.onFavorite,
   });
 
-  final String subject;
-  final String title;
-  final String subtitle;
-  final String difficulty;
+  final Question question;
+  final VoidCallback onFavorite;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      margin: const EdgeInsets.only(bottom: 12),
+      child: ListTile(
+        contentPadding: const EdgeInsets.all(16),
+        title: Text(
+          question.topic,
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 16,
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+        subtitle: Padding(
+          padding: const EdgeInsets.only(top: 8),
+          child: Text(
+            '${question.examSource ?? 'Banco local'} - ${question.subject}',
+            style: const TextStyle(
+              color: Color(0xFF9BAABD),
+              height: 1.3,
+            ),
+          ),
+        ),
+        trailing: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              _difficultyLabel(question.difficulty),
+              style: const TextStyle(
+                color: Color(0xFF4DA3FF),
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+            IconButton(
+              tooltip: 'Favoritar',
+              onPressed: onFavorite,
+              icon: Icon(
+                question.isFavorite ? Icons.favorite : Icons.favorite_border,
+                color: question.isFavorite
+                    ? const Color(0xFFEF4444)
+                    : const Color(0xFF6F7D90),
+              ),
+            ),
+          ],
+        ),
+        onTap: () {
+          context.read<QuestionsProvider>().selectQuestion(question);
+          Navigator.of(context).pushNamed('/answer');
+        },
+      ),
+    );
+  }
+
+  String _difficultyLabel(int difficulty) {
+    switch (difficulty) {
+      case 1:
+        return 'Facil';
+      case 3:
+        return 'Dificil';
+      default:
+        return 'Medio';
+    }
+  }
 }

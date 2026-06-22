@@ -44,8 +44,7 @@ class UserModel extends User {
       maxStreak: _asInt(map[DbConstants.colUserMaxStreak]) ?? 0,
       totalAnswered: _asInt(map[DbConstants.colUserTotalAnswered]) ?? 0,
       totalCorrect: _asInt(map[DbConstants.colUserTotalCorrect]) ?? 0,
-      studyGoalMinutes:
-          _asInt(map[DbConstants.colUserStudyGoalMinutes]) ?? 30,
+      studyGoalMinutes: _asInt(map[DbConstants.colUserStudyGoalMinutes]) ?? 30,
       notificationsEnabled: _asBool(
         map[DbConstants.colUserNotificationsEnabled],
         defaultValue: true,

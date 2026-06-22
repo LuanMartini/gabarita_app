@@ -426,7 +426,8 @@ class DatabaseHelper {
 
     if (difficulties != null && difficulties.isNotEmpty) {
       final placeholders = List.filled(difficulties.length, '?').join(',');
-      whereClauses.add('${DbConstants.colQuestionDifficulty} IN ($placeholders)');
+      whereClauses
+          .add('${DbConstants.colQuestionDifficulty} IN ($placeholders)');
       whereArgs.addAll(difficulties);
     }
 
@@ -440,11 +441,20 @@ class DatabaseHelper {
     }
 
     if (searchText != null && searchText.isNotEmpty) {
-      whereClauses.add('${DbConstants.colQuestionText} LIKE ?');
-      whereArgs.add('%$searchText%');
+      whereClauses.add('''
+        (
+          ${DbConstants.colQuestionText} LIKE ?
+          OR ${DbConstants.colQuestionTopic} LIKE ?
+          OR ${DbConstants.colQuestionSubject} LIKE ?
+          OR ${DbConstants.colQuestionExamSource} LIKE ?
+        )
+      ''');
+      final pattern = '%$searchText%';
+      whereArgs.addAll([pattern, pattern, pattern, pattern]);
     }
 
-    final whereString = whereClauses.isNotEmpty ? whereClauses.join(' AND ') : null;
+    final whereString =
+        whereClauses.isNotEmpty ? whereClauses.join(' AND ') : null;
 
     final maps = await db.query(
       DbConstants.tableQuestions,
@@ -514,8 +524,7 @@ class DatabaseHelper {
     );
   }
 
-  Future<List<AttemptModel>> getAttemptsByUser(int userId,
-      {int? limit}) async {
+  Future<List<AttemptModel>> getAttemptsByUser(int userId, {int? limit}) async {
     final db = await database;
     final maps = await db.query(
       DbConstants.tableAttempts,
@@ -633,6 +642,48 @@ class DatabaseHelper {
       model.toMap(),
       conflictAlgorithm: ConflictAlgorithm.replace,
     );
+  }
+
+  Future<QuestionModel?> getQuestionBySourceAndTopic({
+    required String examSource,
+    required String topic,
+  }) async {
+    final db = await database;
+    final maps = await db.query(
+      DbConstants.tableQuestions,
+      where:
+          '${DbConstants.colQuestionExamSource} = ? AND ${DbConstants.colQuestionTopic} = ?',
+      whereArgs: [examSource, topic],
+      limit: 1,
+    );
+    if (maps.isEmpty) return null;
+    return QuestionModel.fromMap(maps.first);
+  }
+
+  Future<int> upsertQuestionBySourceAndTopic(Question question) async {
+    final existing = await getQuestionBySourceAndTopic(
+      examSource: question.examSource ?? '',
+      topic: question.topic,
+    );
+    if (existing == null) {
+      return insertQuestion(question);
+    }
+
+    final db = await database;
+    final model = QuestionModel.fromEntity(
+      question.copyWith(
+        id: existing.id,
+        isFavorite: existing.isFavorite,
+        createdAt: existing.createdAt,
+      ),
+    );
+    await db.update(
+      DbConstants.tableQuestions,
+      model.toMap(),
+      where: '${DbConstants.colQuestionId} = ?',
+      whereArgs: [existing.id],
+    );
+    return existing.id ?? 0;
   }
 
   Future<List<StudySessionModel>> getStudySessionsByUser(int userId,

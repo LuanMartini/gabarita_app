@@ -1,12 +1,76 @@
+import '../../domain/entities/enem_exam.dart';
 import '../../domain/entities/question.dart';
 import '../../domain/repositories/i_question_repository.dart';
 import '../datasources/local/database_helper.dart';
+import '../datasources/remote/enem_api_client.dart';
 
 class QuestionRepositoryImpl implements IQuestionRepository {
-  QuestionRepositoryImpl([DatabaseHelper? dbHelper])
-      : _dbHelper = dbHelper ?? DatabaseHelper.instance;
+  QuestionRepositoryImpl({
+    DatabaseHelper? dbHelper,
+    EnemApiClient? enemApiClient,
+  })  : _dbHelper = dbHelper ?? DatabaseHelper.instance,
+        _enemApiClient = enemApiClient ?? EnemApiClient();
 
   final DatabaseHelper _dbHelper;
+  final EnemApiClient _enemApiClient;
+
+  @override
+  Future<List<EnemExam>> getAvailableEnemExams() {
+    return _enemApiClient.listExams();
+  }
+
+  @override
+  Future<EnemQuestionSyncResult> syncEnemQuestions({
+    required int year,
+    int limit = 40,
+    String? language,
+  }) async {
+    final remoteQuestions = await _enemApiClient.fetchQuestions(
+      year: year,
+      maxQuestions: limit,
+      language: language,
+    );
+
+    var imported = 0;
+    var updated = 0;
+    var skipped = 0;
+    final seen = <String>{};
+
+    for (final remoteQuestion in remoteQuestions) {
+      if (!remoteQuestion.canBecomeQuestion) {
+        skipped++;
+        continue;
+      }
+
+      final question = remoteQuestion.toQuestion();
+      final naturalKey = '${question.examSource}|${question.topic}';
+      if (seen.contains(naturalKey)) {
+        skipped++;
+        continue;
+      }
+      seen.add(naturalKey);
+
+      final existing = await _dbHelper.getQuestionBySourceAndTopic(
+        examSource: question.examSource ?? '',
+        topic: question.topic,
+      );
+      await _dbHelper.upsertQuestionBySourceAndTopic(question);
+
+      if (existing == null) {
+        imported++;
+      } else {
+        updated++;
+      }
+    }
+
+    return EnemQuestionSyncResult(
+      year: year,
+      imported: imported,
+      updated: updated,
+      skipped: skipped,
+      totalFetched: remoteQuestions.length,
+    );
+  }
 
   @override
   Future<int> insertQuestion(Question question) {
@@ -210,6 +274,20 @@ class QuestionRepositoryImpl implements IQuestionRepository {
           break;
         case 'fisica':
           aliases.addAll(const ['Fisica', 'Física']);
+          break;
+        case 'linguagens':
+          aliases.addAll(const ['Linguagens', 'Portugues', 'Português']);
+          break;
+        case 'ciencias humanas':
+          aliases.addAll(const [
+            'Ciencias Humanas',
+            'Ciências Humanas',
+            'Historia',
+            'História',
+            'Geografia',
+            'Filosofia',
+            'Sociologia',
+          ]);
           break;
         case 'ciencias':
         case 'natureza':

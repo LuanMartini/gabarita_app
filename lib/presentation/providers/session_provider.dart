@@ -58,7 +58,8 @@ class SessionProvider extends ChangeNotifier {
   String? get examSource => _examSource;
   String? get errorMessage => _errorMessage;
 
-  int get correctCount => _attempts.where((attempt) => attempt.isCorrect).length;
+  int get correctCount =>
+      _attempts.where((attempt) => attempt.isCorrect).length;
 
   int get wrongCount => _attempts.length - correctCount;
 

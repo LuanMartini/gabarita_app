@@ -7,6 +7,7 @@ import 'data/repositories/study_progress_repository_impl.dart';
 import 'data/repositories/study_session_repository_impl.dart';
 import 'data/repositories/user_repository_impl.dart';
 import 'domain/usecases/generate_simulado.dart';
+import 'domain/usecases/get_available_enem_exams.dart';
 import 'domain/usecases/get_or_create_user.dart';
 import 'domain/usecases/get_questions_by_filter.dart';
 import 'domain/usecases/get_recent_simulados.dart';
@@ -16,6 +17,7 @@ import 'domain/usecases/get_wrong_questions.dart';
 import 'domain/usecases/save_attempt.dart';
 import 'domain/usecases/save_study_session.dart';
 import 'domain/usecases/set_weekly_goal.dart';
+import 'domain/usecases/sync_enem_questions.dart';
 import 'domain/usecases/toggle_favorite_question.dart';
 import 'presentation/providers/questions_provider.dart';
 import 'presentation/providers/session_provider.dart';
@@ -69,11 +71,15 @@ class GabaritaApp extends StatelessWidget {
         ),
         ChangeNotifierProvider<QuestionsProvider>(
           create: (_) => QuestionsProvider(
+            getAvailableEnemExams: GetAvailableEnemExams(questionRepository),
             getQuestionsByFilter: GetQuestionsByFilter(questionRepository),
             getWrongQuestions: GetWrongQuestions(questionRepository),
             toggleFavoriteQuestion: ToggleFavoriteQuestion(questionRepository),
             saveAttempt: saveAttempt,
-          )..loadQuestions(),
+            syncEnemQuestions: SyncEnemQuestions(questionRepository),
+          )
+            ..loadQuestions()
+            ..loadAvailableEnemExams(),
         ),
         ChangeNotifierProvider<SessionProvider>(
           create: (_) => SessionProvider(

@@ -42,11 +42,9 @@ class StudySessionModel extends StudySession {
       userId: _asInt(map[DbConstants.colSessionUserId]) ?? 0,
       type: _asSessionType(map[DbConstants.colSessionType]),
       subjects: _asStringList(map[DbConstants.colSessionSubjectsJson]),
-      totalQuestions:
-          _asInt(map[DbConstants.colSessionTotalQuestions]) ?? 0,
+      totalQuestions: _asInt(map[DbConstants.colSessionTotalQuestions]) ?? 0,
       correctCount: _asInt(map[DbConstants.colSessionCorrectCount]) ?? 0,
-      durationSeconds:
-          _asInt(map[DbConstants.colSessionDurationSeconds]) ?? 0,
+      durationSeconds: _asInt(map[DbConstants.colSessionDurationSeconds]) ?? 0,
       latitude: _asDouble(map[DbConstants.colSessionLatitude]),
       longitude: _asDouble(map[DbConstants.colSessionLongitude]),
       locationName: map[DbConstants.colSessionLocationName] as String?,

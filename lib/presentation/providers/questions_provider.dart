@@ -1,10 +1,13 @@
 import 'package:flutter/foundation.dart';
 
 import '../../domain/entities/attempt.dart';
+import '../../domain/entities/enem_exam.dart';
 import '../../domain/entities/question.dart';
+import '../../domain/usecases/get_available_enem_exams.dart';
 import '../../domain/usecases/get_questions_by_filter.dart';
 import '../../domain/usecases/get_wrong_questions.dart';
 import '../../domain/usecases/save_attempt.dart';
+import '../../domain/usecases/sync_enem_questions.dart';
 import '../../domain/usecases/toggle_favorite_question.dart';
 
 enum QuestionAnswerStatus {
@@ -33,50 +36,72 @@ class AnswerFeedback {
 
 class QuestionsProvider extends ChangeNotifier {
   QuestionsProvider({
+    required GetAvailableEnemExams getAvailableEnemExams,
     required GetQuestionsByFilter getQuestionsByFilter,
     required GetWrongQuestions getWrongQuestions,
     required ToggleFavoriteQuestion toggleFavoriteQuestion,
     required SaveAttempt saveAttempt,
-  })  : _getQuestionsByFilter = getQuestionsByFilter,
+    required SyncEnemQuestions syncEnemQuestions,
+  })  : _getAvailableEnemExams = getAvailableEnemExams,
+        _getQuestionsByFilter = getQuestionsByFilter,
         _getWrongQuestions = getWrongQuestions,
         _toggleFavoriteQuestion = toggleFavoriteQuestion,
-        _saveAttempt = saveAttempt;
+        _saveAttempt = saveAttempt,
+        _syncEnemQuestions = syncEnemQuestions;
 
+  final GetAvailableEnemExams _getAvailableEnemExams;
   final GetQuestionsByFilter _getQuestionsByFilter;
   final GetWrongQuestions _getWrongQuestions;
   final ToggleFavoriteQuestion _toggleFavoriteQuestion;
   final SaveAttempt _saveAttempt;
+  final SyncEnemQuestions _syncEnemQuestions;
 
   final Set<String> _selectedSubjects = <String>{};
   final Set<int> _selectedDifficulties = <int>{};
 
   List<Question> _questions = <Question>[];
   List<Question> _wrongQuestions = <Question>[];
+  List<Question> _favoriteQuestions = <Question>[];
+  List<Question> _recommendedQuestions = <Question>[];
+  List<EnemExam> _availableEnemExams = <EnemExam>[];
   QuestionAnswerStatus _answerStatus = QuestionAnswerStatus.idle;
   AnswerFeedback? _lastFeedback;
+  EnemQuestionSyncResult? _lastSyncResult;
   String? _selectedOption;
   bool _favoritesOnly = false;
   bool _isLoading = false;
+  bool _isSyncingEnem = false;
   bool _isSavingAnswer = false;
   int _currentIndex = 0;
+  int? _selectedEnemYear;
   String _searchText = '';
   String? _examSource;
   String? _errorMessage;
+  String? _syncMessage;
 
   List<Question> get questions => List.unmodifiable(_questions);
   List<Question> get wrongQuestions => List.unmodifiable(_wrongQuestions);
+  List<Question> get favoriteQuestions => List.unmodifiable(_favoriteQuestions);
+  List<Question> get recommendedQuestions =>
+      List.unmodifiable(_recommendedQuestions);
+  List<EnemExam> get availableEnemExams =>
+      List.unmodifiable(_availableEnemExams);
   Set<String> get selectedSubjects => Set.unmodifiable(_selectedSubjects);
   Set<int> get selectedDifficulties => Set.unmodifiable(_selectedDifficulties);
   QuestionAnswerStatus get answerStatus => _answerStatus;
   AnswerFeedback? get lastFeedback => _lastFeedback;
+  EnemQuestionSyncResult? get lastSyncResult => _lastSyncResult;
   String? get selectedOption => _selectedOption;
   bool get favoritesOnly => _favoritesOnly;
   bool get isLoading => _isLoading;
+  bool get isSyncingEnem => _isSyncingEnem;
   bool get isSavingAnswer => _isSavingAnswer;
   int get currentIndex => _currentIndex;
+  int? get selectedEnemYear => _selectedEnemYear;
   String get searchText => _searchText;
   String? get examSource => _examSource;
   String? get errorMessage => _errorMessage;
+  String? get syncMessage => _syncMessage;
 
   Question? get currentQuestion {
     if (_questions.isEmpty) return null;
@@ -105,8 +130,7 @@ class QuestionsProvider extends ChangeNotifier {
 
     try {
       _questions = await _getQuestionsByFilter(
-        subjects:
-            _selectedSubjects.isEmpty ? null : _selectedSubjects.toList(),
+        subjects: _selectedSubjects.isEmpty ? null : _selectedSubjects.toList(),
         difficulties: _selectedDifficulties.isEmpty
             ? null
             : _selectedDifficulties.toList(),
@@ -124,6 +148,53 @@ class QuestionsProvider extends ChangeNotifier {
     }
   }
 
+  Future<void> loadAvailableEnemExams() async {
+    try {
+      _availableEnemExams = await _getAvailableEnemExams();
+      if (_availableEnemExams.isNotEmpty) {
+        _selectedEnemYear ??= _availableEnemExams.first.year;
+      }
+    } catch (_) {
+      _syncMessage = 'Nao foi possivel carregar a lista de provas ENEM.';
+    } finally {
+      notifyListeners();
+    }
+  }
+
+  void setSelectedEnemYear(int year) {
+    _selectedEnemYear = year;
+    notifyListeners();
+  }
+
+  Future<void> syncSelectedEnemExam({
+    int limit = 60,
+    String? language,
+  }) async {
+    final year = _selectedEnemYear ?? 2023;
+    _isSyncingEnem = true;
+    _syncMessage = null;
+    _errorMessage = null;
+    notifyListeners();
+
+    try {
+      _lastSyncResult = await _syncEnemQuestions(
+        year: year,
+        limit: limit,
+        language: language,
+      );
+      _examSource = 'ENEM $year';
+      _syncMessage =
+          'ENEM $year sincronizado: ${_lastSyncResult!.saved} questoes salvas.';
+      await loadQuestions();
+    } catch (_) {
+      _syncMessage =
+          'Nao foi possivel sincronizar o ENEM agora. O cache local continua disponivel.';
+    } finally {
+      _isSyncingEnem = false;
+      notifyListeners();
+    }
+  }
+
   Future<void> loadWrongQuestions(int userId) async {
     _setLoading(true);
     _errorMessage = null;
@@ -137,9 +208,44 @@ class QuestionsProvider extends ChangeNotifier {
     }
   }
 
+  Future<void> loadReviewQuestions(int userId) async {
+    _setLoading(true);
+    _errorMessage = null;
+
+    try {
+      final results = await Future.wait<List<Question>>([
+        _getWrongQuestions(userId),
+        _getQuestionsByFilter(favoritesOnly: true),
+        _getQuestionsByFilter(limit: 8),
+      ]);
+      _wrongQuestions = results[0];
+      _favoriteQuestions = results[1];
+      _recommendedQuestions = results[2];
+    } catch (_) {
+      _errorMessage = 'Nao foi possivel carregar a revisao inteligente.';
+    } finally {
+      _setLoading(false);
+    }
+  }
+
   void selectQuestion(Question question) {
     final index = _questions.indexWhere((item) => item.id == question.id);
-    _currentIndex = index < 0 ? 0 : index;
+    if (index < 0) {
+      _questions = [
+        question,
+        ..._questions.where((item) => item.id != question.id),
+      ];
+      _currentIndex = 0;
+    } else {
+      _currentIndex = index;
+    }
+    _clearAnswerState();
+    notifyListeners();
+  }
+
+  void replaceQuestionSet(List<Question> questions) {
+    _questions = List<Question>.from(questions);
+    _currentIndex = 0;
     _clearAnswerState();
     notifyListeners();
   }
@@ -205,6 +311,25 @@ class QuestionsProvider extends ChangeNotifier {
       _isSavingAnswer = false;
       notifyListeners();
     }
+  }
+
+  AnswerFeedback? registerAnsweredFeedback({
+    required Question question,
+    required String selectedOption,
+    required bool isCorrect,
+  }) {
+    _selectedOption = selectedOption.toUpperCase();
+    _lastFeedback = AnswerFeedback(
+      question: question,
+      selectedOption: _selectedOption!,
+      correctOption: question.correctOption.toUpperCase(),
+      isCorrect: isCorrect,
+      explanation: question.feedback,
+      xpEarned: isCorrect ? 15 : 5,
+    );
+    _answerStatus = QuestionAnswerStatus.answered;
+    notifyListeners();
+    return _lastFeedback;
   }
 
   void nextQuestion() {
