@@ -1,15 +1,17 @@
-import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-
-// O nome "gabarita_app" deve ser o mesmo que está na primeira linha do seu pubspec.yaml
-import 'package:gabarita_app/main.dart'; 
+import 'package:gabarita_app/main.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 void main() {
-  testWidgets('Teste inicial de renderização da tela principal', (WidgetTester tester) async {
-    // Constrói o nosso app com o nome atualizado
+  TestWidgetsFlutterBinding.ensureInitialized();
+  sqfliteFfiInit();
+  databaseFactory = databaseFactoryFfi;
+  SharedPreferences.setMockInitialValues(<String, Object>{});
+
+  testWidgets('renderiza o splash inicial', (WidgetTester tester) async {
     await tester.pumpWidget(const GabaritaApp());
 
-    // Verifica se a saudação da Home Screen aparece na tela
-    expect(find.text('Bom dia, Lucas! 👋'), findsOneWidget);
+    expect(find.text('Gabarita'), findsOneWidget);
   });
 }

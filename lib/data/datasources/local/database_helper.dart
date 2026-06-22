@@ -4,12 +4,14 @@
 //  Tabelas: users · questions · attempts · study_sessions
 // ============================================================
 
+import 'dart:io';
+
 import 'package:path/path.dart';
 import 'package:sqflite/sqflite.dart';
 
-import '../../../../../core/constants/db_constants.dart';
-import '../../../../models/models.dart';
-import '../../../../../domain/entities/entities.dart';
+import '../../../core/constants/db_constants.dart';
+import '../../../domain/entities/entities.dart';
+import '../../models/models.dart';
 
 class DatabaseHelper {
   DatabaseHelper._privateConstructor();
@@ -625,23 +627,10 @@ class DatabaseHelper {
 
   Future<void> insertStudySession(StudySession session) async {
     final db = await database;
-    final model = StudySessionModel.fromMap({
-      DbConstants.colSessionId: session.id,
-      DbConstants.colSessionUserId: session.userId,
-      DbConstants.colSessionType: session.type.name,
-      DbConstants.colSessionSubjectsJson: '[]',
-      DbConstants.colSessionTotalQuestions: session.totalQuestions,
-      DbConstants.colSessionCorrectCount: session.correctCount,
-      DbConstants.colSessionDurationSeconds: session.durationSeconds,
-      DbConstants.colSessionLatitude: session.latitude,
-      DbConstants.colSessionLongitude: session.longitude,
-      DbConstants.colSessionLocationName: session.locationName,
-      DbConstants.colSessionStartedAt: session.startedAt.toIso8601String(),
-      DbConstants.colSessionFinishedAt: session.finishedAt?.toIso8601String(),
-    });
+    final model = StudySessionModel.fromEntity(session);
     await db.insert(
       DbConstants.tableStudySessions,
-      (model as StudySessionModel).toMap(),
+      model.toMap(),
       conflictAlgorithm: ConflictAlgorithm.replace,
     );
   }
