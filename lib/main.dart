@@ -1,4 +1,7 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:home_widget/home_widget.dart';
 import 'package:provider/provider.dart';
 
 import 'data/repositories/attempt_repository_impl.dart';
@@ -7,6 +10,7 @@ import 'data/repositories/study_progress_repository_impl.dart';
 import 'data/repositories/study_session_repository_impl.dart';
 import 'data/repositories/user_repository_impl.dart';
 import 'domain/usecases/generate_simulado.dart';
+import 'domain/usecases/add_question.dart';
 import 'domain/usecases/get_available_enem_exams.dart';
 import 'domain/usecases/get_or_create_user.dart';
 import 'domain/usecases/get_questions_by_filter.dart';
@@ -24,22 +28,94 @@ import 'presentation/providers/session_provider.dart';
 import 'presentation/providers/statistics_provider.dart';
 import 'presentation/providers/user_provider.dart';
 import 'presentation/screens/answer/answer_screen.dart';
+import 'presentation/screens/daily_challenge/daily_challenge_launcher_screen.dart';
 import 'presentation/screens/feedback/feedback_screen.dart';
 import 'presentation/screens/home/home_screen.dart';
+import 'presentation/screens/last_topic/last_topic_launcher_screen.dart';
 import 'presentation/screens/profile/profile_screen.dart';
 import 'presentation/screens/questions/questions_screen.dart';
 import 'presentation/screens/review/review_screen.dart';
+import 'presentation/screens/scanner/scanner_screen.dart';
 import 'presentation/screens/simulado/simulado_config_screen.dart';
 import 'presentation/screens/splash/splash_screen.dart';
 import 'presentation/screens/statistics/statistics_screen.dart';
+import 'services/notifications/notification_service.dart';
+import 'services/widgets/home_widget_service.dart';
 
-void main() {
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await _initializePlatformServices();
   runApp(const GabaritaApp());
 }
 
-class GabaritaApp extends StatelessWidget {
+Future<void> _initializePlatformServices() async {
+  try {
+    await NotificationService().initialize();
+  } catch (_) {}
+
+  try {
+    await HomeWidgetService.initialize();
+  } catch (_) {}
+}
+
+class GabaritaApp extends StatefulWidget {
   const GabaritaApp({super.key});
+
+  @override
+  State<GabaritaApp> createState() => _GabaritaAppState();
+}
+
+class _GabaritaAppState extends State<GabaritaApp> {
+  final GlobalKey<NavigatorState> _navigatorKey = GlobalKey<NavigatorState>();
+  StreamSubscription<Uri?>? _homeWidgetSubscription;
+
+  @override
+  void initState() {
+    super.initState();
+    _homeWidgetSubscription = HomeWidget.widgetClicked.listen(
+      _handleHomeWidgetLaunch,
+      onError: (_, __) {},
+    );
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      try {
+        final uri = await HomeWidget.initiallyLaunchedFromHomeWidget();
+        _handleHomeWidgetLaunch(uri);
+      } catch (_) {}
+    });
+  }
+
+  @override
+  void dispose() {
+    _homeWidgetSubscription?.cancel();
+    super.dispose();
+  }
+
+  void _handleHomeWidgetLaunch(Uri? uri) {
+    if (uri == null) return;
+
+    final navigator = _navigatorKey.currentState;
+    if (navigator == null) return;
+
+    switch (uri.host) {
+      case 'scanner':
+        navigator.pushNamed('/scanner');
+        break;
+      case 'stats':
+        navigator.pushNamed('/statistics');
+        break;
+      case 'review':
+        navigator.pushNamed('/review');
+        break;
+      case 'daily-challenge':
+        navigator.pushNamed('/daily-challenge');
+        break;
+      case 'last-topic':
+        navigator.pushNamed('/last-topic');
+        break;
+      default:
+        navigator.pushNamed('/main');
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -77,6 +153,7 @@ class GabaritaApp extends StatelessWidget {
             toggleFavoriteQuestion: ToggleFavoriteQuestion(questionRepository),
             saveAttempt: saveAttempt,
             syncEnemQuestions: SyncEnemQuestions(questionRepository),
+            addQuestion: AddQuestion(questionRepository),
           )
             ..loadQuestions()
             ..loadAvailableEnemExams(),
@@ -98,6 +175,7 @@ class GabaritaApp extends StatelessWidget {
         ),
       ],
       child: MaterialApp(
+        navigatorKey: _navigatorKey,
         title: 'Gabarita',
         debugShowCheckedModeBanner: false,
         theme: ThemeData(
@@ -127,8 +205,12 @@ class GabaritaApp extends StatelessWidget {
         routes: {
           '/main': (_) => const MainNavigationScreen(),
           '/answer': (_) => const AnswerScreen(),
+          '/daily-challenge': (_) => const DailyChallengeLauncherScreen(),
           '/feedback': (_) => const FeedbackScreen(),
+          '/last-topic': (_) => const LastTopicLauncherScreen(),
           '/review': (_) => const ReviewScreen(),
+          '/scanner': (_) => const ScannerScreen(),
+          '/statistics': (_) => const StatisticsScreen(),
         },
         home: const SplashScreen(),
       ),

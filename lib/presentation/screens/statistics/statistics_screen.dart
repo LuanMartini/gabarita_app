@@ -197,6 +197,10 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
                       ),
                     ),
                   ),
+                  const SizedBox(height: 18),
+                  _LocationPerformanceCard(
+                    locations: provider.topStudyLocations,
+                  ),
                 ],
               ),
             ),
@@ -274,6 +278,78 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
     if (value is int) return value;
     if (value is num) return value.toInt();
     return int.tryParse(value?.toString() ?? '') ?? 0;
+  }
+}
+
+class _LocationPerformanceCard extends StatelessWidget {
+  const _LocationPerformanceCard({required this.locations});
+
+  final List<Map<String, dynamic>> locations;
+
+  @override
+  Widget build(BuildContext context) {
+    final best = locations.isEmpty ? null : locations.first;
+    final second = locations.length > 1 ? locations[1] : null;
+    final bestAccuracy = _asDouble(best?['accuracy']);
+    final secondAccuracy = _asDouble(second?['accuracy']);
+    final delta = bestAccuracy - secondAccuracy;
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(18),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Row(
+              children: [
+                Icon(Icons.location_on_outlined, color: Color(0xFF4DA3FF)),
+                SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Local de estudo',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 18,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            if (best == null)
+              const Text(
+                'Responda questoes com o GPS permitido para comparar seu desempenho por local.',
+                style: TextStyle(color: Color(0xFF9BAABD), height: 1.35),
+              )
+            else ...[
+              Text(
+                best['location']?.toString() ?? 'Local registrado',
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                second == null
+                    ? 'Melhor local ate agora: ${(bestAccuracy * 100).round()}% de acertos.'
+                    : '${(bestAccuracy * 100).round()}% de acertos, ${(delta * 100).round()} pontos acima de ${second['location']}.',
+                style: const TextStyle(color: Color(0xFF9BAABD), height: 1.35),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  double _asDouble(Object? value) {
+    if (value == null) return 0;
+    if (value is double) return value;
+    if (value is num) return value.toDouble();
+    return double.tryParse(value.toString()) ?? 0;
   }
 }
 

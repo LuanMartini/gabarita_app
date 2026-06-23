@@ -1,5 +1,5 @@
 name: gabarita_app
-description: Aplicativo educacional para resolução de questões e simulados offline.
+description: Aplicativo educacional para resolucao de questoes e simulados offline.
 publish_to: "none"
 version: 1.0.0+1
 
@@ -10,61 +10,35 @@ dependencies:
   flutter:
     sdk: flutter
 
-  # ── Base de dados local ─────────────────────────────────
   sqflite: ^2.3.3
   path: ^1.9.0
-  http: ^1.2.2
 
-  # ── Hardware ────────────────────────────────────────────
-  sensors_plus: ^5.0.1 # Acelerômetro (Modo Foco)
-  geolocator: ^13.0.1 # GPS (localização de estudo)
-  image_picker: ^1.1.2 # Câmera / Scanner de questões
+  sensors_plus: ^5.0.1
+  geolocator: ^13.0.1
+  image_picker: ^1.1.2
 
-  # ── Notificações locais ─────────────────────────────────
   flutter_local_notifications: ^18.0.1
   timezone: ^0.9.4
 
-  # ── Home Widgets (Android + iOS) ────────────────────────
   home_widget: ^0.7.0
-
-  # ── Gráficos ────────────────────────────────────────────
   fl_chart: ^0.70.2
-
-  # ── Gestão de estado ────────────────────────────────────
   provider: ^6.1.2
-
-  # ── Permissões ──────────────────────────────────────────
   permission_handler: ^11.3.1
 
-  # ── Utilidades ──────────────────────────────────────────
   intl: ^0.19.0
   shared_preferences: ^2.3.3
-  uuid: ^4.4.2 # Geração de UUIDs para sessões
+  uuid: ^4.4.2
 
   cupertino_icons: ^1.0.8
   flutter_markdown_plus: ^1.0.7
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^4.0.0
-  sqflite_common_ffi: ^2.3.3+1 # SQLite para testes unitários em desktop
+  sqflite_common_ffi: ^2.3.3+1
 
 flutter:
   uses-material-design: true
-
-  # Comentado até você criar as pastas e colocar os arquivos lá dentro!
-  # assets:
-  #   - assets/images/
-  #   - assets/icons/
-  #   - assets/fonts/
-  #
-  # fonts:
-  #   - family: Sora
-  #     fonts:
-  #       - asset: assets/fonts/Sora-Regular.ttf
-  #       - asset: assets/fonts/Sora-Medium.ttf
-  #         weight: 500
-  #       - asset: assets/fonts/Sora-SemiBold.ttf
-  #         weight: 600
-  #       - asset: assets/fonts/Sora-Bold.ttf
-  #         weight: 700
+  assets:
+    - assets/data/

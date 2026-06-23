@@ -48,13 +48,31 @@ class _QuestionsScreenState extends State<QuestionsScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text(
-                    'Banco de questoes',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 27,
-                      fontWeight: FontWeight.w800,
-                    ),
+                  Row(
+                    children: [
+                      const Expanded(
+                        child: Text(
+                          'Banco de questoes',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 27,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                      ),
+                      IconButton(
+                        tooltip: 'Scanner',
+                        onPressed: () {
+                          Navigator.of(context).pushNamed('/scanner');
+                        },
+                        style: IconButton.styleFrom(
+                          backgroundColor: const Color(0xFF0E131B),
+                          foregroundColor: const Color(0xFF4DA3FF),
+                          side: const BorderSide(color: Color(0xFF213047)),
+                        ),
+                        icon: const Icon(Icons.document_scanner_outlined),
+                      ),
+                    ],
                   ),
                   const SizedBox(height: 14),
                   TextField(
@@ -162,7 +180,7 @@ class _EnemSyncCard extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const Text(
-              'Questões reais do ENEM',
+              'JSONs locais do ENEM',
               style: TextStyle(
                 color: Colors.white,
                 fontSize: 16,
@@ -174,7 +192,7 @@ class _EnemSyncCard extends StatelessWidget {
               scrollDirection: Axis.horizontal,
               child: Row(
                 children: (exams.isEmpty
-                        ? const [2023, 2022, 2021]
+                        ? const [2023, 2022]
                         : exams.map((exam) => exam.year).take(6).toList())
                     .map((year) {
                   final selected = year == selectedYear;
@@ -212,8 +230,8 @@ class _EnemSyncCard extends StatelessWidget {
                   : const Icon(Icons.cloud_download_outlined),
               label: Text(
                 provider.isSyncingEnem
-                    ? 'Sincronizando...'
-                    : 'Sincronizar ENEM $selectedYear',
+                    ? 'Importando...'
+                    : 'Importar JSON ENEM $selectedYear',
               ),
               style: ElevatedButton.styleFrom(
                 backgroundColor: const Color(0xFF4DA3FF),

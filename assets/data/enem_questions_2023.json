@@ -1,0 +1,100 @@
+{
+  "metadata": {
+    "limit": 5,
+    "offset": 0,
+    "total": 5,
+    "hasMore": false
+  },
+  "questions": [
+    {
+      "title": "Questao 1",
+      "index": 1,
+      "discipline": "matematica",
+      "language": null,
+      "year": 2023,
+      "context": "Uma escola registrou que 60% dos estudantes usam bicicleta ou transporte publico para chegar as aulas. Entre eles, 25% usam bicicleta. Em uma turma com 40 estudantes, mantendo a mesma proporcao, quantos usam bicicleta?",
+      "files": [],
+      "correctAlternative": "B",
+      "alternativesIntroduction": "Considere a turma como uma amostra representativa da escola.",
+      "alternatives": [
+        { "letter": "A", "text": "4", "isCorrect": false },
+        { "letter": "B", "text": "6", "isCorrect": true },
+        { "letter": "C", "text": "10", "isCorrect": false },
+        { "letter": "D", "text": "15", "isCorrect": false },
+        { "letter": "E", "text": "24", "isCorrect": false }
+      ]
+    },
+    {
+      "title": "Questao 2",
+      "index": 2,
+      "discipline": "linguagens",
+      "language": null,
+      "year": 2023,
+      "context": "Em campanhas de utilidade publica, e comum combinar verbo no imperativo, imagem e dados numericos para orientar o leitor.",
+      "files": [],
+      "correctAlternative": "C",
+      "alternativesIntroduction": "Nessa situacao comunicativa, a principal funcao do imperativo e",
+      "alternatives": [
+        { "letter": "A", "text": "relatar um acontecimento historico.", "isCorrect": false },
+        { "letter": "B", "text": "descrever uma paisagem urbana.", "isCorrect": false },
+        { "letter": "C", "text": "estimular uma acao do publico.", "isCorrect": true },
+        { "letter": "D", "text": "apresentar opiniao de especialista.", "isCorrect": false },
+        { "letter": "E", "text": "comparar dois textos literarios.", "isCorrect": false }
+      ]
+    },
+    {
+      "title": "Questao 3",
+      "index": 3,
+      "discipline": "ciencias-natureza",
+      "language": null,
+      "year": 2023,
+      "context": "Um agricultor observou que a retirada da cobertura vegetal aumentou a perda de solo durante as chuvas.",
+      "files": [],
+      "correctAlternative": "D",
+      "alternativesIntroduction": "A pratica que reduz diretamente esse problema e",
+      "alternatives": [
+        { "letter": "A", "text": "aumentar a compactacao do solo.", "isCorrect": false },
+        { "letter": "B", "text": "queimar restos vegetais apos a colheita.", "isCorrect": false },
+        { "letter": "C", "text": "irrigar continuamente a plantacao.", "isCorrect": false },
+        { "letter": "D", "text": "manter cobertura vegetal ou palhada.", "isCorrect": true },
+        { "letter": "E", "text": "remover curvas de nivel.", "isCorrect": false }
+      ]
+    },
+    {
+      "title": "Questao 4",
+      "index": 4,
+      "discipline": "ciencias-humanas",
+      "language": null,
+      "year": 2023,
+      "context": "A urbanizacao brasileira ocorreu de forma acelerada no seculo XX, acompanhada por desigualdades no acesso a moradia, saneamento e transporte.",
+      "files": [],
+      "correctAlternative": "A",
+      "alternativesIntroduction": "Esse processo esta diretamente associado a",
+      "alternatives": [
+        { "letter": "A", "text": "expansao industrial e migracao campo-cidade.", "isCorrect": true },
+        { "letter": "B", "text": "reduzida concentracao fundiaria.", "isCorrect": false },
+        { "letter": "C", "text": "fim das redes de transporte urbano.", "isCorrect": false },
+        { "letter": "D", "text": "queda permanente da populacao urbana.", "isCorrect": false },
+        { "letter": "E", "text": "isolamento das cidades medias.", "isCorrect": false }
+      ]
+    },
+    {
+      "title": "Questao 5",
+      "index": 5,
+      "discipline": "matematica",
+      "language": null,
+      "year": 2023,
+      "context": "Um produto custava R$ 200,00. Apos um desconto de 15%, recebeu um acrescimo de 10% sobre o novo preco.",
+      "files": [],
+      "correctAlternative": "E",
+      "alternativesIntroduction": "O preco final do produto foi",
+      "alternatives": [
+        { "letter": "A", "text": "R$ 170,00", "isCorrect": false },
+        { "letter": "B", "text": "R$ 180,00", "isCorrect": false },
+        { "letter": "C", "text": "R$ 185,00", "isCorrect": false },
+        { "letter": "D", "text": "R$ 190,00", "isCorrect": false },
+        { "letter": "E", "text": "R$ 187,00", "isCorrect": true }
+      ]
+    }
+  ]
+}

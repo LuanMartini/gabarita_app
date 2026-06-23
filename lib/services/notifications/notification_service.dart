@@ -12,6 +12,10 @@ class NotificationService {
   static const String _dailyChannelName = 'Lembrete diario de estudo';
   static const String _dailyChannelDescription =
       'Lembretes offline para manter a rotina de estudos.';
+  static const String _reviewChannelId = 'wrong_question_review';
+  static const String _reviewChannelName = 'Revisao de erros';
+  static const String _reviewChannelDescription =
+      'Lembretes espacados para revisar questoes erradas.';
 
   final FlutterLocalNotificationsPlugin _plugin;
   bool _initialized = false;
@@ -66,6 +70,26 @@ class NotificationService {
     await _plugin.cancel(id);
   }
 
+  Future<void> scheduleWrongQuestionReview({
+    required int questionId,
+    required String questionTopic,
+    Duration delay = const Duration(hours: 6),
+  }) async {
+    await _ensureInitialized();
+
+    await _plugin.zonedSchedule(
+      2000 + questionId,
+      'Revisar erro',
+      'Volte em $questionTopic para fixar o conteudo.',
+      tz.TZDateTime.now(tz.local).add(delay),
+      _reviewNotificationDetails(),
+      androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
+      uiLocalNotificationDateInterpretation:
+          UILocalNotificationDateInterpretation.absoluteTime,
+      payload: 'review:$questionId',
+    );
+  }
+
   Future<void> cancelAll() async {
     await _ensureInitialized();
     await _plugin.cancelAll();
@@ -107,6 +131,24 @@ class NotificationService {
       _dailyChannelId,
       _dailyChannelName,
       channelDescription: _dailyChannelDescription,
+      importance: Importance.defaultImportance,
+      priority: Priority.defaultPriority,
+    );
+
+    const darwinDetails = DarwinNotificationDetails();
+
+    return const NotificationDetails(
+      android: androidDetails,
+      iOS: darwinDetails,
+      macOS: darwinDetails,
+    );
+  }
+
+  NotificationDetails _reviewNotificationDetails() {
+    const androidDetails = AndroidNotificationDetails(
+      _reviewChannelId,
+      _reviewChannelName,
+      channelDescription: _reviewChannelDescription,
       importance: Importance.defaultImportance,
       priority: Priority.defaultPriority,
     );

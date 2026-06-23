@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
@@ -9,6 +10,10 @@ import '../../providers/session_provider.dart';
 import '../../providers/statistics_provider.dart';
 import '../../providers/user_provider.dart';
 import '../../../services/hardware/accelerometer_service.dart';
+import '../../../services/hardware/gps_service.dart';
+import '../../../services/hardware/study_place_service.dart';
+import '../../../services/notifications/notification_service.dart';
+import '../../../services/widgets/home_widget_service.dart';
 
 class AnswerScreen extends StatefulWidget {
   const AnswerScreen({super.key});
@@ -19,6 +24,9 @@ class AnswerScreen extends StatefulWidget {
 
 class _AnswerScreenState extends State<AnswerScreen> {
   final AccelerometerService _accelerometerService = AccelerometerService();
+  final GpsService _gpsService = GpsService();
+  final StudyPlaceService _studyPlaceService = StudyPlaceService();
+  final NotificationService _notificationService = NotificationService();
 
   Timer? _timer;
   int _elapsedSeconds = 0;
@@ -127,6 +135,18 @@ class _AnswerScreenState extends State<AnswerScreen> {
                                       fontWeight: FontWeight.w800,
                                     ),
                                   ),
+                                  if (_hasQuestionImage(
+                                      question.imagePath)) ...[
+                                    const SizedBox(height: 12),
+                                    ClipRRect(
+                                      borderRadius: BorderRadius.circular(8),
+                                      child: Image.file(
+                                        File(question.imagePath!),
+                                        width: double.infinity,
+                                        fit: BoxFit.cover,
+                                      ),
+                                    ),
+                                  ],
                                   const SizedBox(height: 12),
                                   Container(
                                     width: double.infinity,
@@ -284,6 +304,8 @@ class _AnswerScreenState extends State<AnswerScreen> {
     final sessionProvider = context.read<SessionProvider>();
     final question = provider.currentQuestion;
     final selectedOption = provider.selectedOption;
+    final studyLocation = await _captureStudyLocation();
+    final locationName = await _resolveStudyLocationName(studyLocation);
 
     if (sessionProvider.status == SessionStatus.inProgress &&
         question != null &&
@@ -292,6 +314,9 @@ class _AnswerScreenState extends State<AnswerScreen> {
         userId: userId,
         selectedOption: selectedOption,
         timeTakenSeconds: _elapsedSeconds,
+        latitude: studyLocation?.latitude,
+        longitude: studyLocation?.longitude,
+        locationName: locationName,
       );
       provider.registerAnsweredFeedback(
         question: question,
@@ -299,6 +324,12 @@ class _AnswerScreenState extends State<AnswerScreen> {
         isCorrect: isCorrect,
       );
       await _refreshUserStats(userId);
+      await _afterAttemptSaved(
+        userId: userId,
+        questionId: question.id,
+        questionTopic: question.topic,
+        isCorrect: isCorrect,
+      );
       if (!mounted) return;
       Navigator.of(context).pushNamed('/feedback');
       return;
@@ -307,10 +338,49 @@ class _AnswerScreenState extends State<AnswerScreen> {
     final feedback = await provider.confirmSelectedAnswer(
       userId: userId,
       timeTakenSeconds: _elapsedSeconds,
+      latitude: studyLocation?.latitude,
+      longitude: studyLocation?.longitude,
+      locationName: locationName,
     );
     await _refreshUserStats(userId);
     if (!mounted || feedback == null) return;
+    await _afterAttemptSaved(
+      userId: userId,
+      questionId: feedback.question.id,
+      questionTopic: feedback.question.topic,
+      isCorrect: feedback.isCorrect,
+    );
+    if (!mounted) return;
     Navigator.of(context).pushNamed('/feedback');
+  }
+
+  Future<StudyLocation?> _captureStudyLocation() async {
+    try {
+      return await _gpsService.getCurrentStudyLocation(
+        timeLimit: const Duration(seconds: 4),
+      );
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<String?> _resolveStudyLocationName(StudyLocation? location) {
+    return _studyPlaceService.resolvePlaceName(location);
+  }
+
+  Future<void> _afterAttemptSaved({
+    required int userId,
+    required int? questionId,
+    required String questionTopic,
+    required bool isCorrect,
+  }) async {
+    if (!isCorrect && questionId != null) {
+      await _notificationService.scheduleWrongQuestionReview(
+        questionId: questionId,
+        questionTopic: questionTopic,
+      );
+    }
+    await HomeWidgetService.refreshWidgets(userId: userId);
   }
 
   Future<void> _refreshUserStats(int userId) async {
@@ -324,6 +394,12 @@ class _AnswerScreenState extends State<AnswerScreen> {
     final minutes = (_elapsedSeconds ~/ 60).toString().padLeft(2, '0');
     final seconds = (_elapsedSeconds % 60).toString().padLeft(2, '0');
     return '$minutes:$seconds';
+  }
+
+  bool _hasQuestionImage(String? imagePath) {
+    return imagePath != null &&
+        imagePath.isNotEmpty &&
+        File(imagePath).existsSync();
   }
 
   MarkdownStyleSheet _markdownStyle(

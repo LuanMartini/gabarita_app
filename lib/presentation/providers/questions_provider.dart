@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import '../../domain/entities/attempt.dart';
 import '../../domain/entities/enem_exam.dart';
 import '../../domain/entities/question.dart';
+import '../../domain/usecases/add_question.dart';
 import '../../domain/usecases/get_available_enem_exams.dart';
 import '../../domain/usecases/get_questions_by_filter.dart';
 import '../../domain/usecases/get_wrong_questions.dart';
@@ -42,12 +43,14 @@ class QuestionsProvider extends ChangeNotifier {
     required ToggleFavoriteQuestion toggleFavoriteQuestion,
     required SaveAttempt saveAttempt,
     required SyncEnemQuestions syncEnemQuestions,
+    required AddQuestion addQuestion,
   })  : _getAvailableEnemExams = getAvailableEnemExams,
         _getQuestionsByFilter = getQuestionsByFilter,
         _getWrongQuestions = getWrongQuestions,
         _toggleFavoriteQuestion = toggleFavoriteQuestion,
         _saveAttempt = saveAttempt,
-        _syncEnemQuestions = syncEnemQuestions;
+        _syncEnemQuestions = syncEnemQuestions,
+        _addQuestion = addQuestion;
 
   final GetAvailableEnemExams _getAvailableEnemExams;
   final GetQuestionsByFilter _getQuestionsByFilter;
@@ -55,6 +58,7 @@ class QuestionsProvider extends ChangeNotifier {
   final ToggleFavoriteQuestion _toggleFavoriteQuestion;
   final SaveAttempt _saveAttempt;
   final SyncEnemQuestions _syncEnemQuestions;
+  final AddQuestion _addQuestion;
 
   final Set<String> _selectedSubjects = <String>{};
   final Set<int> _selectedDifficulties = <int>{};
@@ -184,13 +188,32 @@ class QuestionsProvider extends ChangeNotifier {
       );
       _examSource = 'ENEM $year';
       _syncMessage =
-          'ENEM $year sincronizado: ${_lastSyncResult!.saved} questoes salvas.';
+          'JSON ENEM $year importado: ${_lastSyncResult!.saved} questoes salvas.';
       await loadQuestions();
     } catch (_) {
       _syncMessage =
-          'Nao foi possivel sincronizar o ENEM agora. O cache local continua disponivel.';
+          'Nao foi possivel importar o JSON ENEM. Verifique os assets locais.';
     } finally {
       _isSyncingEnem = false;
+      notifyListeners();
+    }
+  }
+
+  Future<int?> addLocalQuestion(Question question) async {
+    _isLoading = true;
+    _errorMessage = null;
+    notifyListeners();
+
+    try {
+      final questionId = await _addQuestion(question);
+      await loadQuestions();
+      return questionId;
+    } catch (_) {
+      _errorMessage = 'Nao foi possivel salvar a questao escaneada.';
+      notifyListeners();
+      return null;
+    } finally {
+      _isLoading = false;
       notifyListeners();
     }
   }

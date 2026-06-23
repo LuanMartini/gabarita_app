@@ -2,21 +2,21 @@ import '../../domain/entities/enem_exam.dart';
 import '../../domain/entities/question.dart';
 import '../../domain/repositories/i_question_repository.dart';
 import '../datasources/local/database_helper.dart';
-import '../datasources/remote/enem_api_client.dart';
+import '../datasources/local/enem_json_client.dart';
 
 class QuestionRepositoryImpl implements IQuestionRepository {
   QuestionRepositoryImpl({
     DatabaseHelper? dbHelper,
-    EnemApiClient? enemApiClient,
+    EnemJsonClient? enemJsonClient,
   })  : _dbHelper = dbHelper ?? DatabaseHelper.instance,
-        _enemApiClient = enemApiClient ?? EnemApiClient();
+        _enemJsonClient = enemJsonClient ?? EnemJsonClient();
 
   final DatabaseHelper _dbHelper;
-  final EnemApiClient _enemApiClient;
+  final EnemJsonClient _enemJsonClient;
 
   @override
   Future<List<EnemExam>> getAvailableEnemExams() {
-    return _enemApiClient.listExams();
+    return _enemJsonClient.listExams();
   }
 
   @override
@@ -25,7 +25,7 @@ class QuestionRepositoryImpl implements IQuestionRepository {
     int limit = 40,
     String? language,
   }) async {
-    final remoteQuestions = await _enemApiClient.fetchQuestions(
+    final jsonQuestions = await _enemJsonClient.fetchQuestions(
       year: year,
       maxQuestions: limit,
       language: language,
@@ -36,13 +36,13 @@ class QuestionRepositoryImpl implements IQuestionRepository {
     var skipped = 0;
     final seen = <String>{};
 
-    for (final remoteQuestion in remoteQuestions) {
-      if (!remoteQuestion.canBecomeQuestion) {
+    for (final jsonQuestion in jsonQuestions) {
+      if (!jsonQuestion.canBecomeQuestion) {
         skipped++;
         continue;
       }
 
-      final question = remoteQuestion.toQuestion();
+      final question = jsonQuestion.toQuestion();
       final naturalKey = '${question.examSource}|${question.topic}';
       if (seen.contains(naturalKey)) {
         skipped++;
@@ -68,7 +68,7 @@ class QuestionRepositoryImpl implements IQuestionRepository {
       imported: imported,
       updated: updated,
       skipped: skipped,
-      totalFetched: remoteQuestions.length,
+      totalFetched: jsonQuestions.length,
     );
   }
 

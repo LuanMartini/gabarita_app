@@ -49,14 +49,17 @@ class DatabaseHelper {
     await _createTableUsers(db);
     await _createTableQuestions(db);
     await _createTableAttempts(db);
+    await _createTableUserStats(db);
     await _createTableStudySessions(db);
     await _createIndexes(db);
     await _seedInitialData(db);
   }
 
   Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
-    // Migrações futuras serão adicionadas aqui por versão
-    // Exemplo: if (oldVersion < 2) { await db.execute('ALTER TABLE ...'); }
+    if (oldVersion < 2) {
+      await _createTableUserStats(db);
+      await _createIndexes(db);
+    }
   }
 
   // ─────────────────────────────────────────────────────────
@@ -132,6 +135,21 @@ class DatabaseHelper {
   // ─────────────────────────────────────────────────────────
   //  DDL · Tabela: study_sessions
   // ─────────────────────────────────────────────────────────
+  Future<void> _createTableUserStats(Database db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS ${DbConstants.tableUserStats} (
+        ${DbConstants.colUserStatsId}             INTEGER PRIMARY KEY AUTOINCREMENT,
+        ${DbConstants.colUserStatsUserId}         INTEGER NOT NULL REFERENCES ${DbConstants.tableUsers}(id) ON DELETE CASCADE,
+        ${DbConstants.colUserStatsCategory}       TEXT    NOT NULL,
+        ${DbConstants.colUserStatsTotalAnswered}  INTEGER NOT NULL DEFAULT 0,
+        ${DbConstants.colUserStatsTotalCorrect}   INTEGER NOT NULL DEFAULT 0,
+        ${DbConstants.colUserStatsAccuracyRate}   REAL    NOT NULL DEFAULT 0,
+        ${DbConstants.colUserStatsLastUpdatedAt}  TEXT    NOT NULL,
+        UNIQUE(${DbConstants.colUserStatsUserId}, ${DbConstants.colUserStatsCategory})
+      )
+    ''');
+  }
+
   Future<void> _createTableStudySessions(Database db) async {
     await db.execute('''
       CREATE TABLE IF NOT EXISTS ${DbConstants.tableStudySessions} (
@@ -181,6 +199,10 @@ class DatabaseHelper {
     await db.execute('''
       CREATE INDEX IF NOT EXISTS idx_attempts_question
         ON ${DbConstants.tableAttempts}(${DbConstants.colAttemptQuestionId})
+    ''');
+    await db.execute('''
+      CREATE INDEX IF NOT EXISTS idx_user_stats_user_category
+        ON ${DbConstants.tableUserStats}(${DbConstants.colUserStatsUserId}, ${DbConstants.colUserStatsCategory})
     ''');
   }
 
@@ -517,11 +539,15 @@ class DatabaseHelper {
   Future<int> insertAttempt(Attempt attempt) async {
     final db = await database;
     final model = AttemptModel.fromEntity(attempt);
-    return await db.insert(
-      DbConstants.tableAttempts,
-      model.toMap(),
-      conflictAlgorithm: ConflictAlgorithm.replace,
-    );
+    return await db.transaction((txn) async {
+      final attemptId = await txn.insert(
+        DbConstants.tableAttempts,
+        model.toMap(),
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
+      await _upsertUserStatsForAttempt(txn, attempt);
+      return attemptId;
+    });
   }
 
   Future<List<AttemptModel>> getAttemptsByUser(int userId, {int? limit}) async {
@@ -748,5 +774,152 @@ class DatabaseHelper {
     } catch (_) {
       return 0;
     }
+  }
+
+  Future<int> getTodayAnsweredCount(int userId) async {
+    final db = await database;
+    final result = await db.rawQuery('''
+      SELECT COUNT(*) AS count
+      FROM ${DbConstants.tableAttempts}
+      WHERE ${DbConstants.colAttemptUserId} = ?
+        AND DATE(${DbConstants.colAttemptAnsweredAt}) = DATE('now')
+    ''', [userId]);
+    return (result.first['count'] as int?) ?? 0;
+  }
+
+  Future<Map<String, dynamic>?> getLastStudiedTopic(int userId) async {
+    final db = await database;
+    final rows = await db.rawQuery('''
+      SELECT
+        q.${DbConstants.colQuestionTopic} AS topic,
+        q.${DbConstants.colQuestionSubject} AS subject,
+        q.${DbConstants.colQuestionExamSource} AS exam_source,
+        a.${DbConstants.colAttemptAnsweredAt} AS answered_at
+      FROM ${DbConstants.tableAttempts} a
+      INNER JOIN ${DbConstants.tableQuestions} q
+        ON a.${DbConstants.colAttemptQuestionId} = q.${DbConstants.colQuestionId}
+      WHERE a.${DbConstants.colAttemptUserId} = ?
+      ORDER BY a.${DbConstants.colAttemptAnsweredAt} DESC
+      LIMIT 1
+    ''', [userId]);
+    if (rows.isEmpty) return null;
+    return rows.first;
+  }
+
+  Future<List<int>> getWeeklyAccuracyPercentages(int userId) async {
+    final db = await database;
+    final rows = await db.rawQuery('''
+      SELECT
+        DATE(${DbConstants.colAttemptAnsweredAt}) AS day,
+        COUNT(*) AS total,
+        SUM(${DbConstants.colAttemptIsCorrect}) AS correct
+      FROM ${DbConstants.tableAttempts}
+      WHERE ${DbConstants.colAttemptUserId} = ?
+        AND ${DbConstants.colAttemptAnsweredAt} >= DATE('now', '-6 days')
+      GROUP BY DATE(${DbConstants.colAttemptAnsweredAt})
+    ''', [userId]);
+
+    final byDay = <String, int>{};
+    for (final row in rows) {
+      final total = (row['total'] as int?) ?? 0;
+      final correct = (row['correct'] as int?) ?? 0;
+      final day = row['day']?.toString();
+      if (day == null || total == 0) continue;
+      byDay[day] = ((correct / total) * 100).round();
+    }
+
+    final now = DateTime.now();
+    return List<int>.generate(7, (index) {
+      final date = DateTime(now.year, now.month, now.day)
+          .subtract(Duration(days: 6 - index));
+      final key = date.toIso8601String().split('T').first;
+      return byDay[key] ?? 0;
+    });
+  }
+
+  Future<Map<String, dynamic>?> getBestStudyLocationComparison(
+    int userId,
+  ) async {
+    final locations = await getTopStudyLocations(userId, limit: 2);
+    if (locations.isEmpty) return null;
+    if (locations.length == 1) return locations.first;
+
+    final best = locations.first;
+    final second = locations[1];
+    final bestAccuracy = _asDouble(best['accuracy']);
+    final secondAccuracy = _asDouble(second['accuracy']);
+    return <String, dynamic>{
+      ...best,
+      'comparison_location': second['location'],
+      'comparison_delta': bestAccuracy - secondAccuracy,
+    };
+  }
+
+  Future<void> _upsertUserStatsForAttempt(
+    Transaction txn,
+    Attempt attempt,
+  ) async {
+    final questionRows = await txn.query(
+      DbConstants.tableQuestions,
+      columns: [DbConstants.colQuestionSubject],
+      where: '${DbConstants.colQuestionId} = ?',
+      whereArgs: [attempt.questionId],
+      limit: 1,
+    );
+    if (questionRows.isEmpty) return;
+
+    final category =
+        (questionRows.first[DbConstants.colQuestionSubject] as String?) ??
+            'Geral';
+    final now = DateTime.now().toIso8601String();
+
+    final existingRows = await txn.query(
+      DbConstants.tableUserStats,
+      where:
+          '${DbConstants.colUserStatsUserId} = ? AND ${DbConstants.colUserStatsCategory} = ?',
+      whereArgs: [attempt.userId, category],
+      limit: 1,
+    );
+
+    final correctIncrement = attempt.isCorrect ? 1 : 0;
+    if (existingRows.isEmpty) {
+      await txn.insert(DbConstants.tableUserStats, {
+        DbConstants.colUserStatsUserId: attempt.userId,
+        DbConstants.colUserStatsCategory: category,
+        DbConstants.colUserStatsTotalAnswered: 1,
+        DbConstants.colUserStatsTotalCorrect: correctIncrement,
+        DbConstants.colUserStatsAccuracyRate: attempt.isCorrect ? 1.0 : 0.0,
+        DbConstants.colUserStatsLastUpdatedAt: now,
+      });
+      return;
+    }
+
+    final existing = existingRows.first;
+    final totalAnswered =
+        ((existing[DbConstants.colUserStatsTotalAnswered] as int?) ?? 0) + 1;
+    final totalCorrect =
+        ((existing[DbConstants.colUserStatsTotalCorrect] as int?) ?? 0) +
+            correctIncrement;
+
+    await txn.update(
+      DbConstants.tableUserStats,
+      {
+        DbConstants.colUserStatsTotalAnswered: totalAnswered,
+        DbConstants.colUserStatsTotalCorrect: totalCorrect,
+        DbConstants.colUserStatsAccuracyRate:
+            totalAnswered == 0 ? 0.0 : totalCorrect / totalAnswered,
+        DbConstants.colUserStatsLastUpdatedAt: now,
+      },
+      where:
+          '${DbConstants.colUserStatsUserId} = ? AND ${DbConstants.colUserStatsCategory} = ?',
+      whereArgs: [attempt.userId, category],
+    );
+  }
+
+  double _asDouble(Object? value) {
+    if (value == null) return 0;
+    if (value is double) return value;
+    if (value is num) return value.toDouble();
+    return double.tryParse(value.toString()) ?? 0;
   }
 }

@@ -2,11 +2,12 @@ class DbConstants {
   DbConstants._();
 
   static const String databaseName = 'gabarita.db';
-  static const int databaseVersion = 1;
+  static const int databaseVersion = 2;
 
   static const String tableUsers = 'users';
   static const String tableQuestions = 'questions';
   static const String tableAttempts = 'attempts';
+  static const String tableUserStats = 'user_stats';
   static const String tableStudySessions = 'study_sessions';
 
   static const String colUserId = 'id';
@@ -51,6 +52,14 @@ class DbConstants {
   static const String colAttemptLongitude = 'longitude';
   static const String colAttemptLocationName = 'location_name';
   static const String colAttemptAnsweredAt = 'answered_at';
+
+  static const String colUserStatsId = 'id';
+  static const String colUserStatsUserId = 'user_id';
+  static const String colUserStatsCategory = 'category';
+  static const String colUserStatsTotalAnswered = 'total_answered';
+  static const String colUserStatsTotalCorrect = 'total_correct';
+  static const String colUserStatsAccuracyRate = 'accuracy_rate';
+  static const String colUserStatsLastUpdatedAt = 'last_updated_at';
 
   static const String colSessionId = 'id';
   static const String colSessionUserId = 'user_id';
