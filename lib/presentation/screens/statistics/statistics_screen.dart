@@ -52,42 +52,54 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Row(
-                    children: [
-                      const Expanded(
-                        child: Text(
-                          'Estatisticas',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 28,
-                            fontWeight: FontWeight.w800,
+                  const Text(
+                    'Estatisticas',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 28,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: SegmentedButton<StatisticsPeriod>(
+                      showSelectedIcon: false,
+                      style: ButtonStyle(
+                        backgroundColor:
+                            WidgetStateProperty.resolveWith<Color>((states) {
+                          if (states.contains(WidgetState.selected)) {
+                            return const Color(0xFF12395C);
+                          }
+                          return const Color(0xFF0E131B);
+                        }),
+                        foregroundColor:
+                            WidgetStateProperty.resolveWith<Color>((states) {
+                          if (states.contains(WidgetState.selected)) {
+                            return Colors.white;
+                          }
+                          return const Color(0xFFB6C2D1);
+                        }),
+                        side: WidgetStateProperty.resolveWith<BorderSide>(
+                          (states) => BorderSide(
+                            color: states.contains(WidgetState.selected)
+                                ? const Color(0xFF4DA3FF)
+                                : const Color(0xFF26364A),
                           ),
                         ),
                       ),
-                      DropdownButton<StatisticsPeriod>(
-                        value: provider.selectedPeriod,
-                        dropdownColor: const Color(0xFF0E131B),
-                        iconEnabledColor: const Color(0xFF4DA3FF),
-                        underline: Container(
-                          height: 1,
-                          color: const Color(0xFF4DA3FF),
-                        ),
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.w700,
-                        ),
-                        items: _periods.map((period) {
-                          return DropdownMenuItem<StatisticsPeriod>(
-                            value: period.value,
-                            child: Text(period.label),
-                          );
-                        }).toList(),
-                        onChanged: (value) {
-                          if (value == null) return;
-                          provider.setPeriod(value);
-                        },
-                      ),
-                    ],
+                      segments: _periods.map((period) {
+                        return ButtonSegment<StatisticsPeriod>(
+                          value: period.value,
+                          label: Text(period.label),
+                        );
+                      }).toList(),
+                      selected: {provider.selectedPeriod},
+                      onSelectionChanged: (selection) {
+                        if (selection.isEmpty) return;
+                        provider.setPeriod(selection.first);
+                      },
+                    ),
                   ),
                   const SizedBox(height: 18),
                   Row(
@@ -295,50 +307,73 @@ class _LocationPerformanceCard extends StatelessWidget {
     final delta = bestAccuracy - secondAccuracy;
 
     return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(18),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Row(
-              children: [
-                Icon(Icons.location_on_outlined, color: Color(0xFF4DA3FF)),
-                SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    'Local de estudo',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 18,
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
-                ),
-              ],
+      child: Theme(
+        data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+        child: ExpansionTile(
+          tilePadding: const EdgeInsets.symmetric(horizontal: 18, vertical: 6),
+          childrenPadding: const EdgeInsets.fromLTRB(18, 0, 18, 18),
+          iconColor: const Color(0xFF4DA3FF),
+          collapsedIconColor: const Color(0xFF6F7D90),
+          leading: const Icon(
+            Icons.location_on_outlined,
+            color: Color(0xFF4DA3FF),
+          ),
+          title: const Text(
+            'Local de estudo',
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: 18,
+              fontWeight: FontWeight.w800,
             ),
-            const SizedBox(height: 12),
+          ),
+          subtitle: Text(
+            best == null
+                ? 'Permita GPS para comparar desempenho.'
+                : second == null
+                    ? '${best['location']} lidera com ${(bestAccuracy * 100).round()}% de acertos.'
+                    : '${best['location']} esta ${(delta * 100).round()} pontos acima de ${second['location']}.',
+            style: const TextStyle(color: Color(0xFF9BAABD), height: 1.35),
+          ),
+          children: [
             if (best == null)
-              const Text(
-                'Responda questoes com o GPS permitido para comparar seu desempenho por local.',
-                style: TextStyle(color: Color(0xFF9BAABD), height: 1.35),
-              )
-            else ...[
-              Text(
-                best['location']?.toString() ?? 'Local registrado',
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 16,
-                  fontWeight: FontWeight.w800,
+              const Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  'Responda questoes com o GPS permitido para criar locais como Casa, Biblioteca e Campus.',
+                  style: TextStyle(color: Color(0xFF9BAABD), height: 1.35),
                 ),
-              ),
-              const SizedBox(height: 6),
-              Text(
-                second == null
-                    ? 'Melhor local ate agora: ${(bestAccuracy * 100).round()}% de acertos.'
-                    : '${(bestAccuracy * 100).round()}% de acertos, ${(delta * 100).round()} pontos acima de ${second['location']}.',
-                style: const TextStyle(color: Color(0xFF9BAABD), height: 1.35),
-              ),
-            ],
+              )
+            else
+              ...locations.take(5).map((location) {
+                final accuracy =
+                    (_asDouble(location['accuracy']) * 100).round();
+                final total = _asInt(location['total']);
+                final correct = _asInt(location['correct']);
+                return Padding(
+                  padding: const EdgeInsets.only(top: 12),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          location['location']?.toString() ??
+                              'Local registrado',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                      ),
+                      Text(
+                        '$accuracy%  ($correct/$total)',
+                        style: const TextStyle(
+                          color: Color(0xFFB6C2D1),
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              }),
           ],
         ),
       ),
@@ -350,6 +385,13 @@ class _LocationPerformanceCard extends StatelessWidget {
     if (value is double) return value;
     if (value is num) return value.toDouble();
     return double.tryParse(value.toString()) ?? 0;
+  }
+
+  int _asInt(Object? value) {
+    if (value == null) return 0;
+    if (value is int) return value;
+    if (value is num) return value.toInt();
+    return int.tryParse(value.toString()) ?? 0;
   }
 }
 

@@ -17,6 +17,14 @@ Aplicativo Flutter educacional para resolver questoes, acompanhar desempenho e d
   - Estatistica Rapida com acertos gerais e questoes feitas hoje.
   - Ultimo Topico Estudado com atalho direto para um treino da categoria.
   - Botao Scanner para abrir a camera.
+- Sete widgets Flutter adicionais, diferentes dos listados no prototipo das telas:
+  - `RefreshIndicator` no banco de questoes.
+  - `PopupMenuButton` para acoes rapidas do banco.
+  - `SegmentedButton` para periodo das estatisticas.
+  - `ExpansionTile` para detalhar locais de estudo.
+  - `FilledButton` para abrir o scanner sem usar botao flutuante.
+  - `SwitchListTile` para alternar o filtro de favoritas.
+  - `AnimatedSwitcher` para animar a contagem de questoes.
 
 ## JSONs locais do ENEM
 

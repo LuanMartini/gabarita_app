@@ -43,117 +43,190 @@ class _QuestionsScreenState extends State<QuestionsScreen> {
         return Scaffold(
           backgroundColor: Colors.black,
           body: SafeArea(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.fromLTRB(18, 18, 18, 28),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      const Expanded(
-                        child: Text(
-                          'Banco de questoes',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 27,
-                            fontWeight: FontWeight.w800,
+            child: RefreshIndicator(
+              color: const Color(0xFF4DA3FF),
+              backgroundColor: const Color(0xFF0E131B),
+              onRefresh: () => _refreshQuestions(provider),
+              child: SingleChildScrollView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                padding: const EdgeInsets.fromLTRB(18, 18, 18, 92),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        const Expanded(
+                          child: Text(
+                            'Banco de questoes',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 27,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                        ),
+                        PopupMenuButton<_QuestionMenuAction>(
+                          tooltip: 'Acoes',
+                          color: const Color(0xFF0E131B),
+                          iconColor: const Color(0xFF4DA3FF),
+                          onSelected: (action) =>
+                              _handleMenuAction(context, provider, action),
+                          itemBuilder: (context) {
+                            return const [
+                              PopupMenuItem(
+                                value: _QuestionMenuAction.importJson,
+                                child: Text('Importar JSON ENEM'),
+                              ),
+                              PopupMenuItem(
+                                value: _QuestionMenuAction.clearFilters,
+                                child: Text('Limpar filtros'),
+                              ),
+                              PopupMenuItem(
+                                value: _QuestionMenuAction.openScanner,
+                                child: Text('Abrir scanner'),
+                              ),
+                            ];
+                          },
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 14),
+                    SizedBox(
+                      width: double.infinity,
+                      child: FilledButton.icon(
+                        onPressed: () => Navigator.of(context).pushNamed(
+                          '/scanner',
+                        ),
+                        icon: const Icon(Icons.document_scanner_outlined),
+                        label: const Text('Escanear questao'),
+                        style: FilledButton.styleFrom(
+                          backgroundColor: const Color(0xFF4DA3FF),
+                          foregroundColor: Colors.white,
+                          minimumSize: const Size.fromHeight(46),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
                           ),
                         ),
                       ),
-                      IconButton(
-                        tooltip: 'Scanner',
-                        onPressed: () {
-                          Navigator.of(context).pushNamed('/scanner');
-                        },
-                        style: IconButton.styleFrom(
-                          backgroundColor: const Color(0xFF0E131B),
-                          foregroundColor: const Color(0xFF4DA3FF),
-                          side: const BorderSide(color: Color(0xFF213047)),
+                    ),
+                    const SizedBox(height: 14),
+                    TextField(
+                      controller: _searchController,
+                      style: const TextStyle(color: Colors.white),
+                      decoration: InputDecoration(
+                        hintText: 'Buscar por assunto, banca ou palavra-chave',
+                        hintStyle: const TextStyle(color: Color(0xFF6F7D90)),
+                        filled: true,
+                        fillColor: const Color(0xFF0E131B),
+                        prefixIcon: const Icon(
+                          Icons.search,
+                          color: Color(0xFF6F7D90),
                         ),
-                        icon: const Icon(Icons.document_scanner_outlined),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                          borderSide: BorderSide.none,
+                        ),
+                      ),
+                      onSubmitted: provider.setSearchText,
+                    ),
+                    const SizedBox(height: 14),
+                    _EnemSyncCard(provider: provider),
+                    const SizedBox(height: 14),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: _filters.map((filter) {
+                        final selected = filter == _selectedFilter;
+                        return ChoiceChip(
+                          label: Text(filter),
+                          selected: selected,
+                          selectedColor: const Color(0xFF4DA3FF),
+                          backgroundColor: const Color(0xFF0E131B),
+                          labelStyle: TextStyle(
+                            color: selected
+                                ? Colors.white
+                                : const Color(0xFFB6C2D1),
+                            fontWeight: FontWeight.w700,
+                          ),
+                          side: BorderSide(
+                            color: selected
+                                ? const Color(0xFF4DA3FF)
+                                : const Color(0xFF26364A),
+                          ),
+                          onSelected: (_) {
+                            setState(() {
+                              _selectedFilter = filter;
+                            });
+                            provider.setSingleSubjectFilter(filter);
+                          },
+                        );
+                      }).toList(),
+                    ),
+                    const SizedBox(height: 12),
+                    Card(
+                      child: SwitchListTile(
+                        value: provider.favoritesOnly,
+                        activeThumbColor: const Color(0xFF4DA3FF),
+                        activeTrackColor: const Color(0xFF12395C),
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 14,
+                          vertical: 2,
+                        ),
+                        secondary: const Icon(
+                          Icons.favorite_border,
+                          color: Color(0xFF4DA3FF),
+                        ),
+                        title: const Text(
+                          'Somente favoritas',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                        subtitle: const Text(
+                          'Filtrar questoes marcadas para revisar depois',
+                          style: TextStyle(color: Color(0xFF9BAABD)),
+                        ),
+                        onChanged: (_) {
+                          provider.toggleFavoritesOnly();
+                        },
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    AnimatedSwitcher(
+                      duration: const Duration(milliseconds: 220),
+                      child: Text(
+                        provider.isLoading
+                            ? 'Carregando questoes...'
+                            : '${questions.length} questoes encontradas',
+                        key: ValueKey(
+                          '${provider.isLoading}-${provider.favoritesOnly}-${questions.length}',
+                        ),
+                        style: const TextStyle(color: Color(0xFF9BAABD)),
+                      ),
+                    ),
+                    if (provider.errorMessage != null) ...[
+                      const SizedBox(height: 10),
+                      Text(
+                        provider.errorMessage!,
+                        style: const TextStyle(color: Color(0xFFEF4444)),
                       ),
                     ],
-                  ),
-                  const SizedBox(height: 14),
-                  TextField(
-                    controller: _searchController,
-                    style: const TextStyle(color: Colors.white),
-                    decoration: InputDecoration(
-                      hintText: 'Buscar por assunto, banca ou palavra-chave',
-                      hintStyle: const TextStyle(color: Color(0xFF6F7D90)),
-                      filled: true,
-                      fillColor: const Color(0xFF0E131B),
-                      prefixIcon: const Icon(
-                        Icons.search,
-                        color: Color(0xFF6F7D90),
-                      ),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(8),
-                        borderSide: BorderSide.none,
-                      ),
-                    ),
-                    onSubmitted: provider.setSearchText,
-                  ),
-                  const SizedBox(height: 14),
-                  _EnemSyncCard(provider: provider),
-                  const SizedBox(height: 14),
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: _filters.map((filter) {
-                      final selected = filter == _selectedFilter;
-                      return ChoiceChip(
-                        label: Text(filter),
-                        selected: selected,
-                        selectedColor: const Color(0xFF4DA3FF),
-                        backgroundColor: const Color(0xFF0E131B),
-                        labelStyle: TextStyle(
-                          color:
-                              selected ? Colors.white : const Color(0xFFB6C2D1),
-                          fontWeight: FontWeight.w700,
-                        ),
-                        side: BorderSide(
-                          color: selected
-                              ? const Color(0xFF4DA3FF)
-                              : const Color(0xFF26364A),
-                        ),
-                        onSelected: (_) {
-                          setState(() {
-                            _selectedFilter = filter;
-                          });
-                          provider.setSingleSubjectFilter(filter);
-                        },
-                      );
-                    }).toList(),
-                  ),
-                  const SizedBox(height: 12),
-                  Text(
-                    provider.isLoading
-                        ? 'Carregando questoes...'
-                        : '${questions.length} questoes encontradas',
-                    style: const TextStyle(color: Color(0xFF9BAABD)),
-                  ),
-                  if (provider.errorMessage != null) ...[
-                    const SizedBox(height: 10),
-                    Text(
-                      provider.errorMessage!,
-                      style: const TextStyle(color: Color(0xFFEF4444)),
+                    const SizedBox(height: 18),
+                    ListView.builder(
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      itemCount: questions.length,
+                      itemBuilder: (context, index) {
+                        final question = questions[index];
+                        return _QuestionCard(
+                          question: question,
+                          onFavorite: () => provider.toggleFavorite(question),
+                        );
+                      },
                     ),
                   ],
-                  const SizedBox(height: 18),
-                  ListView.builder(
-                    shrinkWrap: true,
-                    physics: const NeverScrollableScrollPhysics(),
-                    itemCount: questions.length,
-                    itemBuilder: (context, index) {
-                      final question = questions[index];
-                      return _QuestionCard(
-                        question: question,
-                        onFavorite: () => provider.toggleFavorite(question),
-                      );
-                    },
-                  ),
-                ],
+                ),
               ),
             ),
           ),
@@ -161,6 +234,43 @@ class _QuestionsScreenState extends State<QuestionsScreen> {
       },
     );
   }
+
+  Future<void> _refreshQuestions(QuestionsProvider provider) async {
+    await Future.wait([
+      provider.loadQuestions(),
+      provider.loadAvailableEnemExams(),
+    ]);
+  }
+
+  Future<void> _handleMenuAction(
+    BuildContext context,
+    QuestionsProvider provider,
+    _QuestionMenuAction action,
+  ) async {
+    switch (action) {
+      case _QuestionMenuAction.importJson:
+        await provider.syncSelectedEnemExam(limit: 60);
+        break;
+      case _QuestionMenuAction.clearFilters:
+        _searchController.clear();
+        setState(() {
+          _selectedFilter = 'Todas';
+        });
+        provider.clearFilters();
+        await provider.loadQuestions();
+        break;
+      case _QuestionMenuAction.openScanner:
+        if (!context.mounted) return;
+        Navigator.of(context).pushNamed('/scanner');
+        break;
+    }
+  }
+}
+
+enum _QuestionMenuAction {
+  importJson,
+  clearFilters,
+  openScanner,
 }
 
 class _EnemSyncCard extends StatelessWidget {
