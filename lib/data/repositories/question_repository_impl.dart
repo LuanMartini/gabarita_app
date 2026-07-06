@@ -2,54 +2,75 @@ import '../../domain/entities/enem_exam.dart';
 import '../../domain/entities/question.dart';
 import '../../domain/repositories/i_question_repository.dart';
 import '../datasources/local/database_helper.dart';
-import '../datasources/local/enem_json_client.dart';
+import '../datasources/local/enem_local_data_source.dart';
 
 class QuestionRepositoryImpl implements IQuestionRepository {
   QuestionRepositoryImpl({
     DatabaseHelper? dbHelper,
-    EnemJsonClient? enemJsonClient,
+    EnemLocalDataSource? enemLocalDataSource,
   })  : _dbHelper = dbHelper ?? DatabaseHelper.instance,
-        _enemJsonClient = enemJsonClient ?? EnemJsonClient();
+        _enemLocalDataSource =
+            enemLocalDataSource ?? const EnemLocalDataSource();
 
   final DatabaseHelper _dbHelper;
-  final EnemJsonClient _enemJsonClient;
+  final EnemLocalDataSource _enemLocalDataSource;
 
   @override
   Future<List<EnemExam>> getAvailableEnemExams() {
-    return _enemJsonClient.listExams();
+    return _enemLocalDataSource.listExams();
   }
 
   @override
   Future<EnemQuestionSyncResult> syncEnemQuestions({
     required int year,
-    int limit = 40,
+    int limit = 0,
     String? language,
   }) async {
-    final jsonQuestions = await _enemJsonClient.fetchQuestions(
+    final remoteQuestions = await _enemLocalDataSource.loadQuestions(
       year: year,
-      maxQuestions: limit,
+      limit: limit,
       language: language,
     );
 
-    var imported = 0;
-    var updated = 0;
     var skipped = 0;
     final seen = <String>{};
+    final questionsToImport = <Question>[];
 
-    for (final jsonQuestion in jsonQuestions) {
-      if (!jsonQuestion.canBecomeQuestion) {
+    for (final remoteQuestion in remoteQuestions) {
+      if (!remoteQuestion.canBecomeQuestion) {
         skipped++;
         continue;
       }
 
-      final question = jsonQuestion.toQuestion();
+      final question = remoteQuestion.toQuestion();
       final naturalKey = '${question.examSource}|${question.topic}';
       if (seen.contains(naturalKey)) {
         skipped++;
         continue;
       }
       seen.add(naturalKey);
+      questionsToImport.add(question);
+    }
 
+    if (language == null && limit <= 0 && questionsToImport.isNotEmpty) {
+      final existingCount = await _dbHelper.getQuestionsCountByExamSource(
+        'ENEM $year',
+      );
+      if (existingCount >= questionsToImport.length) {
+        return EnemQuestionSyncResult(
+          year: year,
+          imported: 0,
+          updated: 0,
+          skipped: remoteQuestions.length,
+          totalFetched: remoteQuestions.length,
+        );
+      }
+    }
+
+    var imported = 0;
+    var updated = 0;
+
+    for (final question in questionsToImport) {
       final existing = await _dbHelper.getQuestionBySourceAndTopic(
         examSource: question.examSource ?? '',
         topic: question.topic,
@@ -68,7 +89,7 @@ class QuestionRepositoryImpl implements IQuestionRepository {
       imported: imported,
       updated: updated,
       skipped: skipped,
-      totalFetched: jsonQuestions.length,
+      totalFetched: remoteQuestions.length,
     );
   }
 

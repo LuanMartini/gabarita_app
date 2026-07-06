@@ -249,7 +249,7 @@ class _QuestionsScreenState extends State<QuestionsScreen> {
   ) async {
     switch (action) {
       case _QuestionMenuAction.importJson:
-        await provider.syncSelectedEnemExam(limit: 60);
+        await provider.syncSelectedEnemExam();
         break;
       case _QuestionMenuAction.clearFilters:
         _searchController.clear();
@@ -281,7 +281,7 @@ class _EnemSyncCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final exams = provider.availableEnemExams;
-    final selectedYear = provider.selectedEnemYear ?? 2023;
+    final selectedYear = provider.selectedEnemYear ?? 2025;
 
     return Card(
       child: Padding(
@@ -290,7 +290,7 @@ class _EnemSyncCard extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const Text(
-              'JSONs locais do ENEM',
+              'Banco local do ENEM',
               style: TextStyle(
                 color: Colors.white,
                 fontSize: 16,
@@ -302,7 +302,7 @@ class _EnemSyncCard extends StatelessWidget {
               scrollDirection: Axis.horizontal,
               child: Row(
                 children: (exams.isEmpty
-                        ? const [2023, 2022]
+                        ? const [2025, 2024, 2023]
                         : exams.map((exam) => exam.year).take(6).toList())
                     .map((year) {
                   final selected = year == selectedYear;
@@ -330,7 +330,7 @@ class _EnemSyncCard extends StatelessWidget {
             ElevatedButton.icon(
               onPressed: provider.isSyncingEnem
                   ? null
-                  : () => provider.syncSelectedEnemExam(limit: 60),
+                  : () => provider.syncSelectedEnemExam(),
               icon: provider.isSyncingEnem
                   ? const SizedBox(
                       width: 18,
@@ -341,7 +341,7 @@ class _EnemSyncCard extends StatelessWidget {
               label: Text(
                 provider.isSyncingEnem
                     ? 'Importando...'
-                    : 'Importar JSON ENEM $selectedYear',
+                    : 'Carregar ENEM $selectedYear offline',
               ),
               style: ElevatedButton.styleFrom(
                 backgroundColor: const Color(0xFF4DA3FF),

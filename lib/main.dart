@@ -4,13 +4,14 @@ import 'package:flutter/material.dart';
 import 'package:home_widget/home_widget.dart';
 import 'package:provider/provider.dart';
 
+import 'core/database/database_initializer.dart';
 import 'data/repositories/attempt_repository_impl.dart';
 import 'data/repositories/question_repository_impl.dart';
 import 'data/repositories/study_progress_repository_impl.dart';
 import 'data/repositories/study_session_repository_impl.dart';
 import 'data/repositories/user_repository_impl.dart';
-import 'domain/usecases/generate_simulado.dart';
 import 'domain/usecases/add_question.dart';
+import 'domain/usecases/generate_simulado.dart';
 import 'domain/usecases/get_available_enem_exams.dart';
 import 'domain/usecases/get_or_create_user.dart';
 import 'domain/usecases/get_questions_by_filter.dart';
@@ -44,6 +45,7 @@ import 'services/widgets/home_widget_service.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await initializeDatabaseFactory();
   await _initializePlatformServices();
   runApp(const GabaritaApp());
 }
@@ -154,9 +156,7 @@ class _GabaritaAppState extends State<GabaritaApp> {
             saveAttempt: saveAttempt,
             syncEnemQuestions: SyncEnemQuestions(questionRepository),
             addQuestion: AddQuestion(questionRepository),
-          )
-            ..loadQuestions()
-            ..loadAvailableEnemExams(),
+          )..initializeLocalEnemBank(),
         ),
         ChangeNotifierProvider<SessionProvider>(
           create: (_) => SessionProvider(

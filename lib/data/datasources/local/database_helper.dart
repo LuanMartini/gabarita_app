@@ -532,6 +532,19 @@ class DatabaseHelper {
     return (result.first['count'] as int?) ?? 0;
   }
 
+  Future<int> getQuestionsCountByExamSource(String examSource) async {
+    final db = await database;
+    final result = await db.rawQuery(
+      '''
+      SELECT COUNT(*) as count
+      FROM ${DbConstants.tableQuestions}
+      WHERE ${DbConstants.colQuestionExamSource} = ?
+      ''',
+      [examSource],
+    );
+    return (result.first['count'] as int?) ?? 0;
+  }
+
   // ══════════════════════════════════════════════════════════
   //  CRUD · ATTEMPTS
   // ══════════════════════════════════════════════════════════

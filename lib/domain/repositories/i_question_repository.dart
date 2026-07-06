@@ -5,7 +5,7 @@ abstract class IQuestionRepository {
   Future<List<EnemExam>> getAvailableEnemExams();
   Future<EnemQuestionSyncResult> syncEnemQuestions({
     required int year,
-    int limit = 40,
+    int limit = 0,
     String? language,
   });
   Future<int> insertQuestion(Question question);

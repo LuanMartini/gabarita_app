@@ -11,6 +11,7 @@ dependencies:
     sdk: flutter
 
   sqflite: ^2.3.3
+  sqflite_common_ffi: ^2.3.3+1
   path: ^1.9.0
 
   sensors_plus: ^5.0.1
@@ -36,9 +37,8 @@ dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^4.0.0
-  sqflite_common_ffi: ^2.3.3+1
 
 flutter:
   uses-material-design: true
   assets:
-    - assets/data/
+    - assets/data/enem/

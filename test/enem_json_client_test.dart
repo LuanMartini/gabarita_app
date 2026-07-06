@@ -1,27 +1,29 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:gabarita_app/data/datasources/local/enem_json_client.dart';
+import 'package:gabarita_app/data/datasources/local/enem_local_data_source.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   test('carrega provas ENEM a partir de assets JSON locais', () async {
-    final client = EnemJsonClient();
+    const dataSource = EnemLocalDataSource();
 
-    final exams = await client.listExams();
+    final exams = await dataSource.listExams();
 
-    expect(exams.map((exam) => exam.year), containsAll(<int>[2023, 2022]));
+    expect(exams.map((exam) => exam.year), containsAll(<int>[2025, 2009]));
   });
 
   test('converte questoes JSON locais para o modelo usado pelo app', () async {
-    final client = EnemJsonClient();
+    const dataSource = EnemLocalDataSource();
 
-    final questions = await client.fetchQuestions(year: 2023, maxQuestions: 3);
+    final questions = await dataSource.loadQuestions(year: 2025, limit: 3);
     final firstQuestion = questions.first.toQuestion();
 
     expect(questions, hasLength(3));
-    expect(firstQuestion.examSource, 'ENEM 2023');
+    expect(firstQuestion.examSource, 'ENEM 2025');
     expect(
-        firstQuestion.options.keys, containsAll(<String>['A', 'B', 'C', 'D']));
+      firstQuestion.options.keys,
+      containsAll(<String>['A', 'B', 'C', 'D']),
+    );
     expect(firstQuestion.correctOption, isNotEmpty);
   });
 }

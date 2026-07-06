@@ -82,6 +82,7 @@ class QuestionsProvider extends ChangeNotifier {
   String? _examSource;
   String? _errorMessage;
   String? _syncMessage;
+  bool _localBankReady = false;
 
   List<Question> get questions => List.unmodifiable(_questions);
   List<Question> get wrongQuestions => List.unmodifiable(_wrongQuestions);
@@ -106,6 +107,7 @@ class QuestionsProvider extends ChangeNotifier {
   String? get examSource => _examSource;
   String? get errorMessage => _errorMessage;
   String? get syncMessage => _syncMessage;
+  bool get localBankReady => _localBankReady;
 
   Question? get currentQuestion {
     if (_questions.isEmpty) return null;
@@ -152,6 +154,58 @@ class QuestionsProvider extends ChangeNotifier {
     }
   }
 
+  Future<void> initializeLocalEnemBank() async {
+    if (_localBankReady || _isSyncingEnem) return;
+
+    _isLoading = true;
+    _isSyncingEnem = true;
+    _errorMessage = null;
+    _syncMessage = 'Preparando banco local do ENEM...';
+    notifyListeners();
+
+    var imported = 0;
+    var updated = 0;
+    var fetched = 0;
+
+    try {
+      _availableEnemExams = await _getAvailableEnemExams();
+      if (_availableEnemExams.isNotEmpty) {
+        _selectedEnemYear ??= _availableEnemExams.first.year;
+      }
+
+      for (final exam in _availableEnemExams) {
+        final result = await _syncEnemQuestions(
+          year: exam.year,
+          limit: 0,
+        );
+        imported += result.imported;
+        updated += result.updated;
+        fetched += result.totalFetched;
+      }
+
+      _localBankReady = true;
+      _examSource = null;
+      _syncMessage = imported + updated > 0
+          ? 'Banco ENEM local pronto: ${imported + updated} questoes importadas.'
+          : 'Banco ENEM local pronto: $fetched questoes disponiveis.';
+      _questions = await _getQuestionsByFilter(limit: 80);
+      _currentIndex = 0;
+      _clearAnswerState();
+    } catch (error) {
+      _errorMessage = 'Nao foi possivel preparar o banco local do ENEM.';
+      _syncMessage = 'Falha ao carregar JSON local do ENEM: $error';
+      try {
+        _questions = await _getQuestionsByFilter(limit: 80);
+      } catch (_) {
+        _questions = <Question>[];
+      }
+    } finally {
+      _isLoading = false;
+      _isSyncingEnem = false;
+      notifyListeners();
+    }
+  }
+
   Future<void> loadAvailableEnemExams() async {
     try {
       _availableEnemExams = await _getAvailableEnemExams();
@@ -159,7 +213,7 @@ class QuestionsProvider extends ChangeNotifier {
         _selectedEnemYear ??= _availableEnemExams.first.year;
       }
     } catch (_) {
-      _syncMessage = 'Nao foi possivel carregar a lista de provas ENEM.';
+      _syncMessage = 'Nao foi possivel carregar o indice local do ENEM.';
     } finally {
       notifyListeners();
     }
@@ -171,10 +225,10 @@ class QuestionsProvider extends ChangeNotifier {
   }
 
   Future<void> syncSelectedEnemExam({
-    int limit = 60,
+    int limit = 0,
     String? language,
   }) async {
-    final year = _selectedEnemYear ?? 2023;
+    final year = _selectedEnemYear ?? 2025;
     _isSyncingEnem = true;
     _syncMessage = null;
     _errorMessage = null;
@@ -187,12 +241,13 @@ class QuestionsProvider extends ChangeNotifier {
         language: language,
       );
       _examSource = 'ENEM $year';
-      _syncMessage =
-          'JSON ENEM $year importado: ${_lastSyncResult!.saved} questoes salvas.';
+      _syncMessage = _lastSyncResult!.saved == 0
+          ? 'ENEM $year ja estava carregado do JSON local.'
+          : 'ENEM $year importado do JSON local: ${_lastSyncResult!.saved} questoes salvas.';
       await loadQuestions();
-    } catch (_) {
+    } catch (error) {
       _syncMessage =
-          'Nao foi possivel importar o JSON ENEM. Verifique os assets locais.';
+          'Nao foi possivel importar o ENEM $year do JSON local. $error';
     } finally {
       _isSyncingEnem = false;
       notifyListeners();
