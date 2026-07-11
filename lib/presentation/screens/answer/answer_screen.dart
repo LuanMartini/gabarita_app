@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
@@ -144,19 +143,6 @@ class _AnswerScreenState extends State<AnswerScreen> {
                                       fontWeight: FontWeight.w800,
                                     ),
                                   ),
-                                  if (_hasQuestionImage(
-                                    question.imagePath,
-                                  )) ...[
-                                    const SizedBox(height: 12),
-                                    ClipRRect(
-                                      borderRadius: BorderRadius.circular(8),
-                                      child: Image.file(
-                                        File(question.imagePath!),
-                                        width: double.infinity,
-                                        fit: BoxFit.cover,
-                                      ),
-                                    ),
-                                  ],
                                   const SizedBox(height: 12),
                                   Container(
                                     width: double.infinity,
@@ -418,12 +404,6 @@ class _AnswerScreenState extends State<AnswerScreen> {
     final minutes = (_elapsedSeconds ~/ 60).toString().padLeft(2, '0');
     final seconds = (_elapsedSeconds % 60).toString().padLeft(2, '0');
     return '$minutes:$seconds';
-  }
-
-  bool _hasQuestionImage(String? imagePath) {
-    return imagePath != null &&
-        imagePath.isNotEmpty &&
-        File(imagePath).existsSync();
   }
 
   String _offlineMarkdown(String value) {

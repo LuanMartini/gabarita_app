@@ -1,5 +1,3 @@
-import 'dart:io';
-
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -379,8 +377,8 @@ class _ScannerImageCard extends StatelessWidget {
                           size: 42,
                         ),
                       )
-                    : Image.file(
-                        File(image!.path),
+                    : Image.memory(
+                        image!.bytes,
                         fit: BoxFit.cover,
                       ),
               ),

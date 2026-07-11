@@ -25,7 +25,7 @@ class SimuladoConfigScreen extends StatelessWidget {
           backgroundColor: Colors.black,
           body: SafeArea(
             child: SingleChildScrollView(
-              padding: const EdgeInsets.fromLTRB(18, 18, 18, 28),
+              padding: const EdgeInsets.fromLTRB(18, 18, 18, 96),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [

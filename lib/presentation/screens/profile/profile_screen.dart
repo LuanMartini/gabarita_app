@@ -38,7 +38,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           backgroundColor: Colors.black,
           body: SafeArea(
             child: SingleChildScrollView(
-              padding: const EdgeInsets.fromLTRB(18, 18, 18, 28),
+              padding: const EdgeInsets.fromLTRB(18, 18, 18, 96),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [

@@ -4,7 +4,6 @@
 //  Tabelas: users · questions · attempts · study_sessions
 // ============================================================
 
-import 'dart:io';
 import 'dart:math' as math;
 
 import 'package:path/path.dart';
@@ -14,6 +13,8 @@ import '../../../core/constants/db_constants.dart';
 import '../../../domain/entities/entities.dart';
 import '../../../domain/services/question_quality_policy.dart';
 import '../../models/models.dart';
+import 'local_file_size_stub.dart'
+    if (dart.library.io) 'local_file_size_io.dart';
 
 class QuestionUpsertResult {
   const QuestionUpsertResult({required this.inserted, required this.updated});
@@ -1656,12 +1657,7 @@ class DatabaseHelper {
   Future<int> getDatabaseSizeBytes() async {
     final dbPath = await getDatabasesPath();
     final path = join(dbPath, DbConstants.databaseName);
-    try {
-      final file = File(path);
-      return await file.length();
-    } catch (_) {
-      return 0;
-    }
+    return getLocalFileSizeBytes(path);
   }
 
   Future<int> getTodayAnsweredCount(int userId) async {

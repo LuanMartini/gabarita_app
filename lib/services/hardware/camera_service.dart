@@ -1,20 +1,25 @@
+import 'dart:typed_data';
+
 import 'package:image_picker/image_picker.dart';
 
 class ScannedQuestionImage {
   const ScannedQuestionImage({
     required this.path,
     required this.name,
+    required this.bytes,
     required this.mimeType,
   });
 
   final String path;
   final String name;
+  final Uint8List bytes;
   final String? mimeType;
 
   Map<String, dynamic> toMap() {
     return {
       'path': path,
       'name': name,
+      'bytes_length': bytes.length,
       'mime_type': mimeType,
     };
   }
@@ -42,6 +47,7 @@ class CameraService {
     return ScannedQuestionImage(
       path: image.path,
       name: image.name,
+      bytes: await image.readAsBytes(),
       mimeType: image.mimeType,
     );
   }

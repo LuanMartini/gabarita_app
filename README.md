@@ -9,6 +9,8 @@ Aplicativo Flutter educacional para resolver questoes, acompanhar desempenho e d
 - Simulados misturam automaticamente questoes textuais de varios anos do ENEM.
 - Limpeza do banco remove duplicadas, incompletas e questoes que dependem de imagens, graficos, tabelas ou figuras.
 - Nenhuma API, Firebase, Supabase, servidor ou requisicao HTTP na execucao do app.
+- Suporte ao Chrome/Web com SQLite local via WASM/IndexedDB.
+- Layout responsivo validado em celular no modo retrato e paisagem.
 - Acelerometro: modo foco pausa o cronometro quando o celular fica virado para baixo.
 - Camera: scanner abre a camera como apoio e cadastra a questao local em formato textual.
 - GPS: tentativas salvam latitude/longitude quando permitido, agrupam coordenadas proximas como Casa/Biblioteca/Campus e exibem desempenho por local.
@@ -60,4 +62,10 @@ O APK debug fica em:
 
 ```text
 build/app/outputs/flutter-apk/app-debug.apk
+```
+
+O build web fica em:
+
+```text
+build/web
 ```
