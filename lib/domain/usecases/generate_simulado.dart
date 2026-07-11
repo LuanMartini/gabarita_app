@@ -11,10 +11,10 @@ class GenerateSimulado {
     List<String> subjects = const <String>[],
     String? examSource,
   }) {
-    return _questionRepository.getQuestionsByFilter(
+    return _questionRepository.getSimuladoQuestions(
+      quantity: quantity,
       subjects: subjects.isEmpty ? null : subjects,
       examSource: examSource,
-      limit: quantity,
     );
   }
 }

@@ -26,70 +26,46 @@ class QuestionRepositoryImpl implements IQuestionRepository {
     int limit = 0,
     String? language,
   }) async {
-    final remoteQuestions = await _enemLocalDataSource.loadQuestions(
+    final localQuestions = await _enemLocalDataSource.loadQuestions(
       year: year,
       limit: limit,
       language: language,
     );
 
     var skipped = 0;
-    final seen = <String>{};
+    final seenNaturalKeys = <String>{};
+    final seenContent = <String>{};
     final questionsToImport = <Question>[];
 
-    for (final remoteQuestion in remoteQuestions) {
-      if (!remoteQuestion.canBecomeQuestion) {
+    for (final localQuestion in localQuestions) {
+      if (!localQuestion.canBecomeQuestion) {
         skipped++;
         continue;
       }
 
-      final question = remoteQuestion.toQuestion();
-      final naturalKey = '${question.examSource}|${question.topic}';
-      if (seen.contains(naturalKey)) {
+      final question = localQuestion.toQuestion();
+      final naturalKey = '${localQuestion.year}|${localQuestion.index}';
+      final contentKey = _questionContentKey(question);
+      if (!seenNaturalKeys.add(naturalKey) || !seenContent.add(contentKey)) {
         skipped++;
         continue;
       }
-      seen.add(naturalKey);
       questionsToImport.add(question);
     }
 
-    if (language == null && limit <= 0 && questionsToImport.isNotEmpty) {
-      final existingCount = await _dbHelper.getQuestionsCountByExamSource(
-        'ENEM $year',
-      );
-      if (existingCount >= questionsToImport.length) {
-        return EnemQuestionSyncResult(
-          year: year,
-          imported: 0,
-          updated: 0,
-          skipped: remoteQuestions.length,
-          totalFetched: remoteQuestions.length,
-        );
-      }
-    }
-
-    var imported = 0;
-    var updated = 0;
-
-    for (final question in questionsToImport) {
-      final existing = await _dbHelper.getQuestionBySourceAndTopic(
-        examSource: question.examSource ?? '',
-        topic: question.topic,
-      );
-      await _dbHelper.upsertQuestionBySourceAndTopic(question);
-
-      if (existing == null) {
-        imported++;
-      } else {
-        updated++;
-      }
-    }
+    final result = language == null && limit <= 0
+        ? await _dbHelper.replaceQuestionsFromSource(
+            examSource: 'ENEM $year',
+            questions: questionsToImport,
+          )
+        : await _dbHelper.upsertQuestionsBySourceAndTopic(questionsToImport);
 
     return EnemQuestionSyncResult(
       year: year,
-      imported: imported,
-      updated: updated,
+      imported: result.inserted,
+      updated: result.updated,
       skipped: skipped,
-      totalFetched: remoteQuestions.length,
+      totalFetched: localQuestions.length,
     );
   }
 
@@ -115,13 +91,11 @@ class QuestionRepositoryImpl implements IQuestionRepository {
 
   @override
   Future<List<Question>> getQuestions() async {
-    await seedMockQuestions();
     return _dbHelper.getAllQuestions();
   }
 
   @override
   Future<List<Question>> getAllQuestions() async {
-    await seedMockQuestions();
     return _dbHelper.getAllQuestions();
   }
 
@@ -136,8 +110,6 @@ class QuestionRepositoryImpl implements IQuestionRepository {
     String? searchText,
     int? limit,
   }) async {
-    await seedMockQuestions();
-
     final resolvedSubjects = subjects ??
         (subject != null && subject.isNotEmpty ? <String>[subject] : null);
     final resolvedExamSource = examSource ?? vestibular;
@@ -149,6 +121,19 @@ class QuestionRepositoryImpl implements IQuestionRepository {
       favoritesOnly: favoritesOnly,
       searchText: searchText,
       limit: limit,
+    );
+  }
+
+  @override
+  Future<List<Question>> getSimuladoQuestions({
+    required int quantity,
+    List<String>? subjects,
+    String? examSource,
+  }) {
+    return _dbHelper.getBalancedSimuladoQuestions(
+      quantity: quantity,
+      subjects: _expandSubjectAliases(subjects),
+      examSource: examSource,
     );
   }
 
@@ -174,13 +159,11 @@ class QuestionRepositoryImpl implements IQuestionRepository {
 
   @override
   Future<int> getTotalQuestionsCount() async {
-    await seedMockQuestions();
     return _dbHelper.getTotalQuestionsCount();
   }
 
   @override
   Future<Question?> getDailyChallenge(int userId) async {
-    await seedMockQuestions();
     return _dbHelper.getDailyChallenge(userId);
   }
 
@@ -284,8 +267,9 @@ class QuestionRepositoryImpl implements IQuestionRepository {
         case 'matematica':
           aliases.addAll(const ['Matematica', 'Matemática', 'MatemÃ¡tica']);
           break;
+        case 'linguagens':
         case 'portugues':
-          aliases.addAll(const ['Portugues', 'Português', 'PortuguÃªs']);
+          aliases.addAll(const ['Linguagens', 'Portugues', 'Português']);
           break;
         case 'historia':
           aliases.addAll(const ['Historia', 'História', 'HistÃ³ria']);
@@ -295,9 +279,6 @@ class QuestionRepositoryImpl implements IQuestionRepository {
           break;
         case 'fisica':
           aliases.addAll(const ['Fisica', 'Física']);
-          break;
-        case 'linguagens':
-          aliases.addAll(const ['Linguagens', 'Portugues', 'Português']);
           break;
         case 'ciencias humanas':
           aliases.addAll(const [
@@ -350,5 +331,21 @@ class QuestionRepositoryImpl implements IQuestionRepository {
         .replaceAll('ô', 'o')
         .replaceAll('ú', 'u')
         .replaceAll('ç', 'c');
+  }
+
+  String _questionContentKey(Question question) {
+    return <String>[
+      question.text,
+      question.optionA,
+      question.optionB,
+      question.optionC,
+      question.optionD,
+      question.optionE ?? '',
+      question.correctOption,
+    ]
+        .map(
+          (value) => value.trim().toLowerCase().replaceAll(RegExp(r'\s+'), ' '),
+        )
+        .join('|');
   }
 }

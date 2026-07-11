@@ -24,10 +24,9 @@ dependencies:
   home_widget: ^0.7.0
   fl_chart: ^0.70.2
   provider: ^6.1.2
-  permission_handler: ^11.3.1
+
 
   intl: ^0.19.0
-  shared_preferences: ^2.3.3
   uuid: ^4.4.2
 
   cupertino_icons: ^1.0.8

@@ -4,7 +4,7 @@ import '../datasources/local/database_helper.dart';
 
 class UserRepositoryImpl implements IUserRepository {
   UserRepositoryImpl([DatabaseHelper? dbHelper])
-      : _dbHelper = dbHelper ?? DatabaseHelper.instance;
+    : _dbHelper = dbHelper ?? DatabaseHelper.instance;
 
   final DatabaseHelper _dbHelper;
 
@@ -26,21 +26,6 @@ class UserRepositoryImpl implements IUserRepository {
   @override
   Future<int> updateUser(User user) {
     return _dbHelper.updateUser(user);
-  }
-
-  @override
-  Future<void> recordCorrectAnswer(int userId) {
-    return _dbHelper.recordCorrectAnswer(userId);
-  }
-
-  @override
-  Future<void> recordWrongAnswer(int userId) {
-    return _dbHelper.recordWrongAnswer(userId);
-  }
-
-  @override
-  Future<void> updateStreak(int userId, int newStreak) {
-    return _dbHelper.updateStreak(userId, newStreak);
   }
 
   @override

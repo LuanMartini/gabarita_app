@@ -46,8 +46,8 @@ import 'services/widgets/home_widget_service.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await initializeDatabaseFactory();
-  await _initializePlatformServices();
   runApp(const GabaritaApp());
+  unawaited(_initializePlatformServices());
 }
 
 Future<void> _initializePlatformServices() async {
@@ -126,11 +126,7 @@ class _GabaritaAppState extends State<GabaritaApp> {
     final userRepository = UserRepositoryImpl();
     final studyProgressRepository = StudyProgressRepositoryImpl();
     final studySessionRepository = StudySessionRepositoryImpl();
-    final saveAttempt = SaveAttempt(
-      attemptRepository,
-      userRepository: userRepository,
-      studyProgressRepository: studyProgressRepository,
-    );
+    final saveAttempt = SaveAttempt(attemptRepository);
     final getUserStatistics = GetUserStatistics(
       userRepository,
       attemptRepository,
@@ -240,10 +236,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.black,
-      body: IndexedStack(
-        index: _selectedIndex,
-        children: _screens,
-      ),
+      body: IndexedStack(index: _selectedIndex, children: _screens),
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _selectedIndex,
         onTap: (index) {

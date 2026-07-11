@@ -5,6 +5,7 @@
 // ============================================================
 
 import 'dart:io';
+import 'dart:math' as math;
 
 import 'package:path/path.dart';
 import 'package:sqflite/sqflite.dart';
@@ -12,6 +13,25 @@ import 'package:sqflite/sqflite.dart';
 import '../../../core/constants/db_constants.dart';
 import '../../../domain/entities/entities.dart';
 import '../../models/models.dart';
+
+class QuestionUpsertResult {
+  const QuestionUpsertResult({required this.inserted, required this.updated});
+
+  final int inserted;
+  final int updated;
+}
+
+class _SimuladoCandidate {
+  const _SimuladoCandidate({
+    required this.question,
+    required this.year,
+    required this.lastSelectedAt,
+  });
+
+  final QuestionModel question;
+  final int year;
+  final DateTime? lastSelectedAt;
+}
 
 class DatabaseHelper {
   DatabaseHelper._privateConstructor();
@@ -51,6 +71,9 @@ class DatabaseHelper {
     await _createTableAttempts(db);
     await _createTableUserStats(db);
     await _createTableStudySessions(db);
+    await _createTableStudyProgress(db);
+    await _createTableStudyPlaces(db);
+    await _createTableSimuladoQuestionHistory(db);
     await _createIndexes(db);
     await _seedInitialData(db);
   }
@@ -60,6 +83,19 @@ class DatabaseHelper {
       await _createTableUserStats(db);
       await _createIndexes(db);
     }
+    if (oldVersion < 3) {
+      await _createTableStudyProgress(db);
+    }
+    if (oldVersion < 4) {
+      await _createTableStudyPlaces(db);
+    }
+    if (oldVersion < 5) {
+      await _createTableSimuladoQuestionHistory(db);
+    }
+    if (oldVersion < 6) {
+      await _cleanQuestionBank(db);
+    }
+    await _createIndexes(db);
   }
 
   // ─────────────────────────────────────────────────────────
@@ -169,6 +205,43 @@ class DatabaseHelper {
     ''');
   }
 
+  Future<void> _createTableStudyProgress(Database db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS ${DbConstants.tableStudyProgress} (
+        ${DbConstants.colProgressUserId} INTEGER PRIMARY KEY REFERENCES ${DbConstants.tableUsers}(id) ON DELETE CASCADE,
+        ${DbConstants.colProgressCurrentStreak} INTEGER NOT NULL DEFAULT 0,
+        ${DbConstants.colProgressMaxStreak} INTEGER NOT NULL DEFAULT 0,
+        ${DbConstants.colProgressWeeklyGoalQuestions} INTEGER NOT NULL DEFAULT 50,
+        ${DbConstants.colProgressWeeklyAnsweredQuestions} INTEGER NOT NULL DEFAULT 0,
+        ${DbConstants.colProgressLastStudyDate} TEXT,
+        ${DbConstants.colProgressWeekStartedAt} TEXT
+      )
+    ''');
+  }
+
+  Future<void> _createTableStudyPlaces(Database db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS ${DbConstants.tableStudyPlaces} (
+        ${DbConstants.colStudyPlaceId} INTEGER PRIMARY KEY AUTOINCREMENT,
+        ${DbConstants.colStudyPlaceName} TEXT NOT NULL,
+        ${DbConstants.colStudyPlaceLatitude} REAL NOT NULL,
+        ${DbConstants.colStudyPlaceLongitude} REAL NOT NULL,
+        ${DbConstants.colStudyPlaceCreatedAt} TEXT NOT NULL,
+        ${DbConstants.colStudyPlaceLastSeenAt} TEXT NOT NULL
+      )
+    ''');
+  }
+
+  Future<void> _createTableSimuladoQuestionHistory(Database db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS ${DbConstants.tableSimuladoQuestionHistory} (
+        ${DbConstants.colSimuladoHistoryQuestionId} INTEGER PRIMARY KEY REFERENCES ${DbConstants.tableQuestions}(id) ON DELETE CASCADE,
+        ${DbConstants.colSimuladoHistoryLastSelectedAt} TEXT NOT NULL,
+        ${DbConstants.colSimuladoHistorySelectionCount} INTEGER NOT NULL DEFAULT 0
+      )
+    ''');
+  }
+
   // ─────────────────────────────────────────────────────────
   //  DDL · Índices para performance
   // ─────────────────────────────────────────────────────────
@@ -185,6 +258,10 @@ class DatabaseHelper {
     await db.execute('''
       CREATE INDEX IF NOT EXISTS idx_questions_favorite
         ON ${DbConstants.tableQuestions}(${DbConstants.colQuestionIsFavorite})
+    ''');
+    await db.execute('''
+      CREATE INDEX IF NOT EXISTS idx_questions_exam_year
+        ON ${DbConstants.tableQuestions}(${DbConstants.colQuestionExamSource}, ${DbConstants.colQuestionYear})
     ''');
 
     // Attempts: ordenar por data e filtrar por sessão
@@ -203,6 +280,18 @@ class DatabaseHelper {
     await db.execute('''
       CREATE INDEX IF NOT EXISTS idx_user_stats_user_category
         ON ${DbConstants.tableUserStats}(${DbConstants.colUserStatsUserId}, ${DbConstants.colUserStatsCategory})
+    ''');
+    await db.execute('''
+      CREATE INDEX IF NOT EXISTS idx_sessions_user_started_at
+        ON ${DbConstants.tableStudySessions}(${DbConstants.colSessionUserId}, ${DbConstants.colSessionStartedAt})
+    ''');
+    await db.execute('''
+      CREATE INDEX IF NOT EXISTS idx_study_places_coordinates
+        ON ${DbConstants.tableStudyPlaces}(${DbConstants.colStudyPlaceLatitude}, ${DbConstants.colStudyPlaceLongitude})
+    ''');
+    await db.execute('''
+      CREATE INDEX IF NOT EXISTS idx_simulado_history_last_selected
+        ON ${DbConstants.tableSimuladoQuestionHistory}(${DbConstants.colSimuladoHistoryLastSelectedAt})
     ''');
   }
 
@@ -316,8 +405,11 @@ class DatabaseHelper {
 
     final batch = db.batch();
     for (final q in seedQuestions) {
-      batch.insert(DbConstants.tableQuestions, q,
-          conflictAlgorithm: ConflictAlgorithm.ignore);
+      batch.insert(
+        DbConstants.tableQuestions,
+        q,
+        conflictAlgorithm: ConflictAlgorithm.ignore,
+      );
     }
     await batch.commit(noResult: true);
   }
@@ -372,38 +464,6 @@ class DatabaseHelper {
     );
   }
 
-  /// Incrementa streak e totais directamente (evita race conditions)
-  Future<void> recordCorrectAnswer(int userId) async {
-    final db = await database;
-    await db.rawUpdate('''
-      UPDATE ${DbConstants.tableUsers}
-      SET
-        ${DbConstants.colUserTotalAnswered} = ${DbConstants.colUserTotalAnswered} + 1,
-        ${DbConstants.colUserTotalCorrect}  = ${DbConstants.colUserTotalCorrect}  + 1
-      WHERE ${DbConstants.colUserId} = ?
-    ''', [userId]);
-  }
-
-  Future<void> recordWrongAnswer(int userId) async {
-    final db = await database;
-    await db.rawUpdate('''
-      UPDATE ${DbConstants.tableUsers}
-      SET ${DbConstants.colUserTotalAnswered} = ${DbConstants.colUserTotalAnswered} + 1
-      WHERE ${DbConstants.colUserId} = ?
-    ''', [userId]);
-  }
-
-  Future<void> updateStreak(int userId, int newStreak) async {
-    final db = await database;
-    await db.rawUpdate('''
-      UPDATE ${DbConstants.tableUsers}
-      SET
-        ${DbConstants.colUserCurrentStreak} = ?,
-        ${DbConstants.colUserMaxStreak} = MAX(${DbConstants.colUserMaxStreak}, ?)
-      WHERE ${DbConstants.colUserId} = ?
-    ''', [newStreak, newStreak, userId]);
-  }
-
   // ══════════════════════════════════════════════════════════
   //  CRUD · QUESTIONS
   // ══════════════════════════════════════════════════════════
@@ -414,7 +474,7 @@ class DatabaseHelper {
     return await db.insert(
       DbConstants.tableQuestions,
       model.toMap(),
-      conflictAlgorithm: ConflictAlgorithm.replace,
+      conflictAlgorithm: ConflictAlgorithm.abort,
     );
   }
 
@@ -448,8 +508,9 @@ class DatabaseHelper {
 
     if (difficulties != null && difficulties.isNotEmpty) {
       final placeholders = List.filled(difficulties.length, '?').join(',');
-      whereClauses
-          .add('${DbConstants.colQuestionDifficulty} IN ($placeholders)');
+      whereClauses.add(
+        '${DbConstants.colQuestionDifficulty} IN ($placeholders)',
+      );
       whereArgs.addAll(difficulties);
     }
 
@@ -482,17 +543,170 @@ class DatabaseHelper {
       DbConstants.tableQuestions,
       where: whereString,
       whereArgs: whereArgs.isNotEmpty ? whereArgs : null,
-      orderBy: 'RANDOM()',
+      orderBy:
+          '${DbConstants.colQuestionCreatedAt} DESC, ${DbConstants.colQuestionId} DESC',
       limit: limit,
     );
 
     return maps.map(QuestionModel.fromMap).toList();
   }
 
+  Future<List<QuestionModel>> getBalancedSimuladoQuestions({
+    required int quantity,
+    List<String>? subjects,
+    String? examSource,
+  }) async {
+    if (quantity <= 0) return const <QuestionModel>[];
+
+    final db = await database;
+    final whereClauses = <String>[
+      'q.${DbConstants.colQuestionYear} IS NOT NULL',
+      "q.${DbConstants.colQuestionExamSource} LIKE 'ENEM %'",
+      "(q.${DbConstants.colQuestionImagePath} IS NULL OR TRIM(q.${DbConstants.colQuestionImagePath}) = '')",
+      "TRIM(q.${DbConstants.colQuestionText}) <> ''",
+      "TRIM(q.${DbConstants.colQuestionSubject}) <> ''",
+      "TRIM(q.${DbConstants.colQuestionTopic}) <> ''",
+      "TRIM(q.${DbConstants.colQuestionOptionA}) <> ''",
+      "TRIM(q.${DbConstants.colQuestionOptionB}) <> ''",
+      "TRIM(q.${DbConstants.colQuestionOptionC}) <> ''",
+      "TRIM(q.${DbConstants.colQuestionOptionD}) <> ''",
+      "TRIM(COALESCE(q.${DbConstants.colQuestionOptionE}, '')) <> ''",
+      "q.${DbConstants.colQuestionCorrectOption} IN ('A', 'B', 'C', 'D', 'E')",
+    ];
+    final whereArgs = <Object?>[];
+
+    if (subjects != null && subjects.isNotEmpty) {
+      final placeholders = List.filled(subjects.length, '?').join(',');
+      whereClauses.add(
+        'q.${DbConstants.colQuestionSubject} IN ($placeholders)',
+      );
+      whereArgs.addAll(subjects);
+    }
+
+    if (examSource != null && examSource.trim().isNotEmpty) {
+      whereClauses.add('q.${DbConstants.colQuestionExamSource} = ?');
+      whereArgs.add(examSource.trim());
+    }
+
+    final rows = await db.rawQuery(
+      '''
+        SELECT q.*, h.${DbConstants.colSimuladoHistoryLastSelectedAt}
+        FROM ${DbConstants.tableQuestions} q
+        LEFT JOIN ${DbConstants.tableSimuladoQuestionHistory} h
+          ON h.${DbConstants.colSimuladoHistoryQuestionId} = q.${DbConstants.colQuestionId}
+        WHERE ${whereClauses.join(' AND ')}
+        ORDER BY RANDOM()
+      ''',
+      whereArgs,
+    );
+    final candidates = rows
+        .map(
+          (row) => _SimuladoCandidate(
+            question: QuestionModel.fromMap(row),
+            year: _asInt(row[DbConstants.colQuestionYear]) ?? 0,
+            lastSelectedAt: DateTime.tryParse(
+              row[DbConstants.colSimuladoHistoryLastSelectedAt]?.toString() ??
+                  '',
+            ),
+          ),
+        )
+        .where((candidate) => candidate.year > 0)
+        .toList(growable: false);
+
+    final unseen = candidates
+        .where((candidate) => candidate.lastSelectedAt == null)
+        .toList(growable: false);
+    final seen = candidates
+        .where((candidate) => candidate.lastSelectedAt != null)
+        .toList(growable: false)
+      ..sort(
+        (first, second) =>
+            first.lastSelectedAt!.compareTo(second.lastSelectedAt!),
+      );
+
+    final selected = <_SimuladoCandidate>[
+      ..._takeBalancedQuestions(unseen, quantity),
+    ];
+    if (selected.length < quantity) {
+      selected.addAll(
+        _takeBalancedQuestions(seen, quantity - selected.length),
+      );
+    }
+
+    await _recordSimuladoSelection(
+      selected
+          .map((candidate) => candidate.question.id)
+          .whereType<int>()
+          .toList(growable: false),
+    );
+    return selected.map((candidate) => candidate.question).toList();
+  }
+
+  List<_SimuladoCandidate> _takeBalancedQuestions(
+    List<_SimuladoCandidate> candidates,
+    int quantity,
+  ) {
+    if (quantity <= 0 || candidates.isEmpty) {
+      return const <_SimuladoCandidate>[];
+    }
+
+    final questionsByYear = <int, List<_SimuladoCandidate>>{};
+    for (final candidate in candidates) {
+      questionsByYear.putIfAbsent(candidate.year, () => []).add(candidate);
+    }
+
+    final years = questionsByYear.keys.toList()..shuffle(math.Random.secure());
+    final selected = <_SimuladoCandidate>[];
+
+    while (selected.length < quantity && years.isNotEmpty) {
+      var selectedInRound = false;
+      for (final year in years) {
+        final questions = questionsByYear[year]!;
+        if (questions.isEmpty) continue;
+
+        selected.add(questions.removeAt(0));
+        selectedInRound = true;
+        if (selected.length == quantity) break;
+      }
+      years.removeWhere((year) => questionsByYear[year]!.isEmpty);
+      if (!selectedInRound) break;
+    }
+
+    return selected;
+  }
+
+  Future<void> _recordSimuladoSelection(List<int> questionIds) async {
+    if (questionIds.isEmpty) return;
+
+    final db = await database;
+    final selectedAt = DateTime.now().toUtc().toIso8601String();
+    await db.transaction((txn) async {
+      for (final questionId in questionIds) {
+        final updated = await txn.rawUpdate(
+          '''
+            UPDATE ${DbConstants.tableSimuladoQuestionHistory}
+            SET ${DbConstants.colSimuladoHistoryLastSelectedAt} = ?,
+                ${DbConstants.colSimuladoHistorySelectionCount} = ${DbConstants.colSimuladoHistorySelectionCount} + 1
+            WHERE ${DbConstants.colSimuladoHistoryQuestionId} = ?
+          ''',
+          [selectedAt, questionId],
+        );
+        if (updated > 0) continue;
+
+        await txn.insert(DbConstants.tableSimuladoQuestionHistory, {
+          DbConstants.colSimuladoHistoryQuestionId: questionId,
+          DbConstants.colSimuladoHistoryLastSelectedAt: selectedAt,
+          DbConstants.colSimuladoHistorySelectionCount: 1,
+        });
+      }
+    });
+  }
+
   /// Questões que o utilizador errou (para Revisão Inteligente)
   Future<List<QuestionModel>> getWrongQuestions(int userId) async {
     final db = await database;
-    final maps = await db.rawQuery('''
+    final maps = await db.rawQuery(
+      '''
       SELECT DISTINCT q.*
       FROM ${DbConstants.tableQuestions} q
       INNER JOIN ${DbConstants.tableAttempts} a
@@ -500,7 +714,9 @@ class DatabaseHelper {
       WHERE a.${DbConstants.colAttemptUserId} = ?
         AND a.${DbConstants.colAttemptIsCorrect} = 0
       ORDER BY a.${DbConstants.colAttemptAnsweredAt} DESC
-    ''', [userId]);
+    ''',
+      [userId],
+    );
     return maps.map(QuestionModel.fromMap).toList();
   }
 
@@ -528,7 +744,8 @@ class DatabaseHelper {
   Future<int> getTotalQuestionsCount() async {
     final db = await database;
     final result = await db.rawQuery(
-        'SELECT COUNT(*) as count FROM ${DbConstants.tableQuestions}');
+      'SELECT COUNT(*) as count FROM ${DbConstants.tableQuestions}',
+    );
     return (result.first['count'] as int?) ?? 0;
   }
 
@@ -556,7 +773,29 @@ class DatabaseHelper {
       final attemptId = await txn.insert(
         DbConstants.tableAttempts,
         model.toMap(),
-        conflictAlgorithm: ConflictAlgorithm.replace,
+        conflictAlgorithm: ConflictAlgorithm.abort,
+      );
+      final progress = await _recordAnsweredQuestionInTransaction(
+        txn,
+        userId: attempt.userId,
+        answeredAt: attempt.answeredAt,
+      );
+      await txn.rawUpdate(
+        '''
+        UPDATE ${DbConstants.tableUsers}
+        SET
+          ${DbConstants.colUserTotalAnswered} = ${DbConstants.colUserTotalAnswered} + 1,
+          ${DbConstants.colUserTotalCorrect} = ${DbConstants.colUserTotalCorrect} + ?,
+          ${DbConstants.colUserCurrentStreak} = ?,
+          ${DbConstants.colUserMaxStreak} = ?
+        WHERE ${DbConstants.colUserId} = ?
+      ''',
+        [
+          attempt.isCorrect ? 1 : 0,
+          progress.currentStreak,
+          progress.maxStreak,
+          attempt.userId,
+        ],
       );
       await _upsertUserStatsForAttempt(txn, attempt);
       return attemptId;
@@ -593,7 +832,8 @@ class DatabaseHelper {
   /// Taxa de acerto por matéria (para gráfico de radar)
   Future<Map<String, double>> getAccuracyBySubject(int userId) async {
     final db = await database;
-    final result = await db.rawQuery('''
+    final result = await db.rawQuery(
+      '''
       SELECT
         q.${DbConstants.colQuestionSubject}  AS subject,
         COUNT(*)                              AS total,
@@ -603,7 +843,9 @@ class DatabaseHelper {
         ON a.${DbConstants.colAttemptQuestionId} = q.${DbConstants.colQuestionId}
       WHERE a.${DbConstants.colAttemptUserId} = ?
       GROUP BY q.${DbConstants.colQuestionSubject}
-    ''', [userId]);
+    ''',
+      [userId],
+    );
 
     final map = <String, double>{};
     for (final row in result) {
@@ -618,7 +860,8 @@ class DatabaseHelper {
   /// Respostas por dia nos últimos 7 dias (evolução semanal)
   Future<List<Map<String, dynamic>>> getWeeklyProgress(int userId) async {
     final db = await database;
-    return await db.rawQuery('''
+    return await db.rawQuery(
+      '''
       SELECT
         DATE(${DbConstants.colAttemptAnsweredAt})           AS day,
         COUNT(*)                                             AS total,
@@ -628,14 +871,19 @@ class DatabaseHelper {
         AND ${DbConstants.colAttemptAnsweredAt} >= DATE('now', '-6 days')
       GROUP BY DATE(${DbConstants.colAttemptAnsweredAt})
       ORDER BY day ASC
-    ''', [userId]);
+    ''',
+      [userId],
+    );
   }
 
   /// Locais com mais respostas corretas (cruzamento GPS) ⭐
-  Future<List<Map<String, dynamic>>> getTopStudyLocations(int userId,
-      {int limit = 5}) async {
+  Future<List<Map<String, dynamic>>> getTopStudyLocations(
+    int userId, {
+    int limit = 5,
+  }) async {
     final db = await database;
-    return await db.rawQuery('''
+    return await db.rawQuery(
+      '''
       SELECT
         ${DbConstants.colAttemptLocationName}           AS location,
         COUNT(*)                                         AS total,
@@ -647,13 +895,16 @@ class DatabaseHelper {
       GROUP BY ${DbConstants.colAttemptLocationName}
       ORDER BY accuracy DESC
       LIMIT ?
-    ''', [userId, limit]);
+    ''',
+      [userId, limit],
+    );
   }
 
   /// Desafio do dia: retorna 1 questão não respondida hoje
   Future<QuestionModel?> getDailyChallenge(int userId) async {
     final db = await database;
-    final maps = await db.rawQuery('''
+    final maps = await db.rawQuery(
+      '''
       SELECT q.* FROM ${DbConstants.tableQuestions} q
       WHERE q.${DbConstants.colQuestionId} NOT IN (
         SELECT a.${DbConstants.colAttemptQuestionId}
@@ -663,7 +914,9 @@ class DatabaseHelper {
       )
       ORDER BY RANDOM()
       LIMIT 1
-    ''', [userId]);
+    ''',
+      [userId],
+    );
 
     if (maps.isEmpty) return null;
     return QuestionModel.fromMap(maps.first);
@@ -683,6 +936,113 @@ class DatabaseHelper {
     );
   }
 
+  Future<StudyProgress> getStudyProgress(int userId) async {
+    final db = await database;
+    final rows = await db.query(
+      DbConstants.tableStudyProgress,
+      where: '${DbConstants.colProgressUserId} = ?',
+      whereArgs: [userId],
+      limit: 1,
+    );
+    if (rows.isEmpty) return StudyProgress.initial();
+
+    final current = _studyProgressFromMap(rows.first);
+    final normalized = _resetProgressWeekIfNeeded(current, DateTime.now());
+    if (normalized.weekStartedAt != current.weekStartedAt ||
+        normalized.weeklyAnsweredQuestions != current.weeklyAnsweredQuestions) {
+      await db.transaction(
+        (txn) => _writeStudyProgress(txn, userId, normalized),
+      );
+    }
+    return normalized;
+  }
+
+  Future<StudyProgress> recordAnsweredQuestion({
+    required int userId,
+    DateTime? answeredAt,
+  }) async {
+    final db = await database;
+    return db.transaction(
+      (txn) => _recordAnsweredQuestionInTransaction(
+        txn,
+        userId: userId,
+        answeredAt: answeredAt ?? DateTime.now(),
+      ),
+    );
+  }
+
+  Future<StudyProgress> setWeeklyGoalQuestions({
+    required int userId,
+    required int value,
+  }) async {
+    final db = await database;
+    return db.transaction((txn) async {
+      final current = await _readStudyProgress(txn, userId);
+      final next = _resetProgressWeekIfNeeded(
+        current,
+        DateTime.now(),
+      ).copyWith(weeklyGoalQuestions: value.clamp(1, 999).toInt());
+      await _writeStudyProgress(txn, userId, next);
+      return next;
+    });
+  }
+
+  Future<void> clearStudyProgress(int userId) async {
+    final db = await database;
+    await db.delete(
+      DbConstants.tableStudyProgress,
+      where: '${DbConstants.colProgressUserId} = ?',
+      whereArgs: [userId],
+    );
+  }
+
+  Future<String> resolveStudyPlaceName({
+    required double latitude,
+    required double longitude,
+    required double clusterRadiusMeters,
+    required List<String> defaultNames,
+  }) async {
+    final db = await database;
+    return db.transaction((txn) async {
+      final places = await txn.query(
+        DbConstants.tableStudyPlaces,
+        orderBy: '${DbConstants.colStudyPlaceLastSeenAt} DESC',
+      );
+      final now = DateTime.now();
+
+      for (final place in places) {
+        final distance = _distanceMeters(
+          _asDouble(place[DbConstants.colStudyPlaceLatitude]),
+          _asDouble(place[DbConstants.colStudyPlaceLongitude]),
+          latitude,
+          longitude,
+        );
+        if (distance > clusterRadiusMeters) continue;
+
+        await txn.update(
+          DbConstants.tableStudyPlaces,
+          {DbConstants.colStudyPlaceLastSeenAt: now.toIso8601String()},
+          where: '${DbConstants.colStudyPlaceId} = ?',
+          whereArgs: [place[DbConstants.colStudyPlaceId]],
+        );
+        return place[DbConstants.colStudyPlaceName]?.toString() ?? 'Local';
+      }
+
+      final index = places.length;
+      final name = index < defaultNames.length
+          ? defaultNames[index]
+          : 'Local ${index + 1}';
+      await txn.insert(DbConstants.tableStudyPlaces, {
+        DbConstants.colStudyPlaceName: name,
+        DbConstants.colStudyPlaceLatitude: latitude,
+        DbConstants.colStudyPlaceLongitude: longitude,
+        DbConstants.colStudyPlaceCreatedAt: now.toIso8601String(),
+        DbConstants.colStudyPlaceLastSeenAt: now.toIso8601String(),
+      });
+      return name;
+    });
+  }
+
   Future<QuestionModel?> getQuestionBySourceAndTopic({
     required String examSource,
     required String topic,
@@ -700,33 +1060,113 @@ class DatabaseHelper {
   }
 
   Future<int> upsertQuestionBySourceAndTopic(Question question) async {
-    final existing = await getQuestionBySourceAndTopic(
+    await upsertQuestionsBySourceAndTopic([question]);
+    final stored = await getQuestionBySourceAndTopic(
       examSource: question.examSource ?? '',
       topic: question.topic,
     );
-    if (existing == null) {
-      return insertQuestion(question);
+    return stored?.id ?? 0;
+  }
+
+  Future<QuestionUpsertResult> upsertQuestionsBySourceAndTopic(
+    List<Question> questions,
+  ) async {
+    if (questions.isEmpty) {
+      return const QuestionUpsertResult(inserted: 0, updated: 0);
     }
 
     final db = await database;
-    final model = QuestionModel.fromEntity(
-      question.copyWith(
-        id: existing.id,
-        isFavorite: existing.isFavorite,
-        createdAt: existing.createdAt,
-      ),
-    );
-    await db.update(
-      DbConstants.tableQuestions,
-      model.toMap(),
-      where: '${DbConstants.colQuestionId} = ?',
-      whereArgs: [existing.id],
-    );
-    return existing.id ?? 0;
+    return db.transaction((txn) => _upsertQuestions(txn, questions));
   }
 
-  Future<List<StudySessionModel>> getStudySessionsByUser(int userId,
-      {int? limit}) async {
+  Future<QuestionUpsertResult> replaceQuestionsFromSource({
+    required String examSource,
+    required List<Question> questions,
+  }) async {
+    final db = await database;
+    return db.transaction((txn) async {
+      final result = await _upsertQuestions(txn, questions);
+      final topics = questions.map((question) => question.topic).toSet();
+
+      if (topics.isEmpty) {
+        await txn.delete(
+          DbConstants.tableQuestions,
+          where: '${DbConstants.colQuestionExamSource} = ?',
+          whereArgs: [examSource],
+        );
+        return result;
+      }
+
+      final placeholders = List.filled(topics.length, '?').join(',');
+      await txn.delete(
+        DbConstants.tableQuestions,
+        where:
+            '${DbConstants.colQuestionExamSource} = ? AND ${DbConstants.colQuestionTopic} NOT IN ($placeholders)',
+        whereArgs: [examSource, ...topics],
+      );
+      return result;
+    });
+  }
+
+  Future<QuestionUpsertResult> _upsertQuestions(
+    Transaction txn,
+    List<Question> questions,
+  ) async {
+    var inserted = 0;
+    var updated = 0;
+
+    for (final question in questions) {
+      final existing = await txn.query(
+        DbConstants.tableQuestions,
+        columns: [
+          DbConstants.colQuestionId,
+          DbConstants.colQuestionIsFavorite,
+          DbConstants.colQuestionCreatedAt,
+        ],
+        where:
+            '${DbConstants.colQuestionExamSource} = ? AND ${DbConstants.colQuestionTopic} = ?',
+        whereArgs: [question.examSource ?? '', question.topic],
+        limit: 1,
+      );
+
+      if (existing.isEmpty) {
+        await txn.insert(
+          DbConstants.tableQuestions,
+          QuestionModel.fromEntity(question).toMap(),
+          conflictAlgorithm: ConflictAlgorithm.abort,
+        );
+        inserted++;
+        continue;
+      }
+
+      final stored = existing.first;
+      final model = QuestionModel.fromEntity(
+        question.copyWith(
+          id: stored[DbConstants.colQuestionId] as int?,
+          isFavorite:
+              (stored[DbConstants.colQuestionIsFavorite] as int? ?? 0) != 0,
+          createdAt: DateTime.tryParse(
+                stored[DbConstants.colQuestionCreatedAt]?.toString() ?? '',
+              ) ??
+              question.createdAt,
+        ),
+      );
+      await txn.update(
+        DbConstants.tableQuestions,
+        model.toMap(),
+        where: '${DbConstants.colQuestionId} = ?',
+        whereArgs: [stored[DbConstants.colQuestionId]],
+      );
+      updated++;
+    }
+
+    return QuestionUpsertResult(inserted: inserted, updated: updated);
+  }
+
+  Future<List<StudySessionModel>> getStudySessionsByUser(
+    int userId, {
+    int? limit,
+  }) async {
     final db = await database;
     final maps = await db.query(
       DbConstants.tableStudySessions,
@@ -736,6 +1176,108 @@ class DatabaseHelper {
       limit: limit,
     );
     return maps.map(StudySessionModel.fromMap).toList();
+  }
+
+  Future<void> _cleanQuestionBank(Database db) async {
+    await db.delete(
+      DbConstants.tableQuestions,
+      where: '''
+        TRIM(${DbConstants.colQuestionText}) = ''
+        OR TRIM(${DbConstants.colQuestionSubject}) = ''
+        OR TRIM(${DbConstants.colQuestionTopic}) = ''
+        OR TRIM(${DbConstants.colQuestionOptionA}) = ''
+        OR TRIM(${DbConstants.colQuestionOptionB}) = ''
+        OR TRIM(${DbConstants.colQuestionOptionC}) = ''
+        OR TRIM(${DbConstants.colQuestionOptionD}) = ''
+        OR TRIM(COALESCE(${DbConstants.colQuestionOptionE}, '')) = ''
+        OR ${DbConstants.colQuestionCorrectOption} NOT IN ('A', 'B', 'C', 'D', 'E')
+        OR (
+          ${DbConstants.colQuestionExamSource} LIKE 'ENEM %'
+          AND TRIM(COALESCE(${DbConstants.colQuestionImagePath}, '')) <> ''
+        )
+      ''',
+    );
+    await _removeDuplicateQuestionRecords(db);
+  }
+
+  Future<void> _removeDuplicateQuestionRecords(Database db) async {
+    final rows = await db.query(
+      DbConstants.tableQuestions,
+      columns: [
+        DbConstants.colQuestionId,
+        DbConstants.colQuestionExamSource,
+        DbConstants.colQuestionYear,
+        DbConstants.colQuestionText,
+        DbConstants.colQuestionOptionA,
+        DbConstants.colQuestionOptionB,
+        DbConstants.colQuestionOptionC,
+        DbConstants.colQuestionOptionD,
+        DbConstants.colQuestionOptionE,
+        DbConstants.colQuestionCorrectOption,
+        DbConstants.colQuestionIsFavorite,
+      ],
+      orderBy: '${DbConstants.colQuestionId} ASC',
+    );
+    final firstQuestionByContent = <String, Map<String, Object?>>{};
+
+    for (final row in rows) {
+      final contentKey = _questionContentKey(row);
+      final original = firstQuestionByContent[contentKey];
+      if (original == null) {
+        firstQuestionByContent[contentKey] = row;
+        continue;
+      }
+
+      final originalId = _asInt(original[DbConstants.colQuestionId]);
+      final duplicateId = _asInt(row[DbConstants.colQuestionId]);
+      if (originalId == null || duplicateId == null) continue;
+
+      if ((row[DbConstants.colQuestionIsFavorite] as int? ?? 0) != 0) {
+        await db.update(
+          DbConstants.tableQuestions,
+          {DbConstants.colQuestionIsFavorite: 1},
+          where: '${DbConstants.colQuestionId} = ?',
+          whereArgs: [originalId],
+        );
+      }
+      await db.update(
+        DbConstants.tableAttempts,
+        {DbConstants.colAttemptQuestionId: originalId},
+        where: '${DbConstants.colAttemptQuestionId} = ?',
+        whereArgs: [duplicateId],
+      );
+      await db.delete(
+        DbConstants.tableSimuladoQuestionHistory,
+        where: '${DbConstants.colSimuladoHistoryQuestionId} = ?',
+        whereArgs: [duplicateId],
+      );
+      await db.delete(
+        DbConstants.tableQuestions,
+        where: '${DbConstants.colQuestionId} = ?',
+        whereArgs: [duplicateId],
+      );
+    }
+  }
+
+  String _questionContentKey(Map<String, Object?> row) {
+    final fields = <String>[
+      DbConstants.colQuestionExamSource,
+      DbConstants.colQuestionYear,
+      DbConstants.colQuestionText,
+      DbConstants.colQuestionOptionA,
+      DbConstants.colQuestionOptionB,
+      DbConstants.colQuestionOptionC,
+      DbConstants.colQuestionOptionD,
+      DbConstants.colQuestionOptionE,
+      DbConstants.colQuestionCorrectOption,
+    ];
+    return fields
+        .map((field) => _normalizeQuestionContent(row[field]?.toString() ?? ''))
+        .join('|');
+  }
+
+  String _normalizeQuestionContent(String value) {
+    return value.trim().toLowerCase().replaceAll(RegExp(r'\s+'), ' ');
   }
 
   // ══════════════════════════════════════════════════════════
@@ -761,6 +1303,16 @@ class DatabaseHelper {
       await txn.delete(
         DbConstants.tableStudySessions,
         where: '${DbConstants.colSessionUserId} = ?',
+        whereArgs: [userId],
+      );
+      await txn.delete(
+        DbConstants.tableUserStats,
+        where: '${DbConstants.colUserStatsUserId} = ?',
+        whereArgs: [userId],
+      );
+      await txn.delete(
+        DbConstants.tableStudyProgress,
+        where: '${DbConstants.colProgressUserId} = ?',
         whereArgs: [userId],
       );
       await txn.update(
@@ -791,18 +1343,22 @@ class DatabaseHelper {
 
   Future<int> getTodayAnsweredCount(int userId) async {
     final db = await database;
-    final result = await db.rawQuery('''
+    final result = await db.rawQuery(
+      '''
       SELECT COUNT(*) AS count
       FROM ${DbConstants.tableAttempts}
       WHERE ${DbConstants.colAttemptUserId} = ?
         AND DATE(${DbConstants.colAttemptAnsweredAt}) = DATE('now')
-    ''', [userId]);
+    ''',
+      [userId],
+    );
     return (result.first['count'] as int?) ?? 0;
   }
 
   Future<Map<String, dynamic>?> getLastStudiedTopic(int userId) async {
     final db = await database;
-    final rows = await db.rawQuery('''
+    final rows = await db.rawQuery(
+      '''
       SELECT
         q.${DbConstants.colQuestionTopic} AS topic,
         q.${DbConstants.colQuestionSubject} AS subject,
@@ -814,14 +1370,17 @@ class DatabaseHelper {
       WHERE a.${DbConstants.colAttemptUserId} = ?
       ORDER BY a.${DbConstants.colAttemptAnsweredAt} DESC
       LIMIT 1
-    ''', [userId]);
+    ''',
+      [userId],
+    );
     if (rows.isEmpty) return null;
     return rows.first;
   }
 
   Future<List<int>> getWeeklyAccuracyPercentages(int userId) async {
     final db = await database;
-    final rows = await db.rawQuery('''
+    final rows = await db.rawQuery(
+      '''
       SELECT
         DATE(${DbConstants.colAttemptAnsweredAt}) AS day,
         COUNT(*) AS total,
@@ -830,7 +1389,9 @@ class DatabaseHelper {
       WHERE ${DbConstants.colAttemptUserId} = ?
         AND ${DbConstants.colAttemptAnsweredAt} >= DATE('now', '-6 days')
       GROUP BY DATE(${DbConstants.colAttemptAnsweredAt})
-    ''', [userId]);
+    ''',
+      [userId],
+    );
 
     final byDay = <String, int>{};
     for (final row in rows) {
@@ -843,8 +1404,11 @@ class DatabaseHelper {
 
     final now = DateTime.now();
     return List<int>.generate(7, (index) {
-      final date = DateTime(now.year, now.month, now.day)
-          .subtract(Duration(days: 6 - index));
+      final date = DateTime(
+        now.year,
+        now.month,
+        now.day,
+      ).subtract(Duration(days: 6 - index));
       final key = date.toIso8601String().split('T').first;
       return byDay[key] ?? 0;
     });
@@ -867,6 +1431,142 @@ class DatabaseHelper {
       'comparison_delta': bestAccuracy - secondAccuracy,
     };
   }
+
+  Future<StudyProgress> _readStudyProgress(Transaction txn, int userId) async {
+    final rows = await txn.query(
+      DbConstants.tableStudyProgress,
+      where: '${DbConstants.colProgressUserId} = ?',
+      whereArgs: [userId],
+      limit: 1,
+    );
+    return rows.isEmpty
+        ? StudyProgress.initial()
+        : _studyProgressFromMap(rows.first);
+  }
+
+  Future<StudyProgress> _recordAnsweredQuestionInTransaction(
+    Transaction txn, {
+    required int userId,
+    required DateTime answeredAt,
+  }) async {
+    final current = _resetProgressWeekIfNeeded(
+      await _readStudyProgress(txn, userId),
+      answeredAt,
+    );
+    final previousStudyDay = current.lastStudyDate;
+    final alreadyStudiedToday =
+        previousStudyDay != null && _isSameDate(previousStudyDay, answeredAt);
+    final nextStreak = alreadyStudiedToday
+        ? current.currentStreak
+        : _isYesterday(previousStudyDay, answeredAt)
+            ? current.currentStreak + 1
+            : 1;
+    final next = current.copyWith(
+      currentStreak: nextStreak,
+      maxStreak: math.max(current.maxStreak, nextStreak),
+      weeklyAnsweredQuestions: current.weeklyAnsweredQuestions + 1,
+      lastStudyDate: answeredAt,
+      weekStartedAt: _startOfWeek(answeredAt),
+    );
+    await _writeStudyProgress(txn, userId, next);
+    return next;
+  }
+
+  Future<void> _writeStudyProgress(
+    Transaction txn,
+    int userId,
+    StudyProgress progress,
+  ) async {
+    await txn.insert(
+        DbConstants.tableStudyProgress,
+        {
+          DbConstants.colProgressUserId: userId,
+          DbConstants.colProgressCurrentStreak: progress.currentStreak,
+          DbConstants.colProgressMaxStreak: progress.maxStreak,
+          DbConstants.colProgressWeeklyGoalQuestions:
+              progress.weeklyGoalQuestions,
+          DbConstants.colProgressWeeklyAnsweredQuestions:
+              progress.weeklyAnsweredQuestions,
+          DbConstants.colProgressLastStudyDate:
+              progress.lastStudyDate?.toIso8601String(),
+          DbConstants.colProgressWeekStartedAt:
+              progress.weekStartedAt?.toIso8601String(),
+        },
+        conflictAlgorithm: ConflictAlgorithm.replace);
+  }
+
+  StudyProgress _studyProgressFromMap(Map<String, Object?> map) {
+    return StudyProgress(
+      currentStreak: _asInt(map[DbConstants.colProgressCurrentStreak]) ?? 0,
+      maxStreak: _asInt(map[DbConstants.colProgressMaxStreak]) ?? 0,
+      weeklyGoalQuestions:
+          _asInt(map[DbConstants.colProgressWeeklyGoalQuestions]) ?? 50,
+      weeklyAnsweredQuestions:
+          _asInt(map[DbConstants.colProgressWeeklyAnsweredQuestions]) ?? 0,
+      lastStudyDate: DateTime.tryParse(
+        map[DbConstants.colProgressLastStudyDate]?.toString() ?? '',
+      ),
+      weekStartedAt: DateTime.tryParse(
+        map[DbConstants.colProgressWeekStartedAt]?.toString() ?? '',
+      ),
+    );
+  }
+
+  StudyProgress _resetProgressWeekIfNeeded(
+    StudyProgress progress,
+    DateTime now,
+  ) {
+    final currentWeekStart = _startOfWeek(now);
+    final storedWeekStart = progress.weekStartedAt;
+    if (storedWeekStart != null &&
+        _isSameDate(storedWeekStart, currentWeekStart)) {
+      return progress;
+    }
+    return progress.copyWith(
+      weeklyAnsweredQuestions: 0,
+      weekStartedAt: currentWeekStart,
+    );
+  }
+
+  DateTime _startOfWeek(DateTime date) {
+    final normalized = DateTime(date.year, date.month, date.day);
+    return normalized.subtract(Duration(days: normalized.weekday - 1));
+  }
+
+  bool _isSameDate(DateTime first, DateTime second) {
+    return first.year == second.year &&
+        first.month == second.month &&
+        first.day == second.day;
+  }
+
+  bool _isYesterday(DateTime? previous, DateTime now) {
+    if (previous == null) return false;
+    final yesterday = DateTime(
+      now.year,
+      now.month,
+      now.day,
+    ).subtract(const Duration(days: 1));
+    return _isSameDate(previous, yesterday);
+  }
+
+  double _distanceMeters(
+    double firstLatitude,
+    double firstLongitude,
+    double secondLatitude,
+    double secondLongitude,
+  ) {
+    const earthRadiusMeters = 6371000.0;
+    final latitudeDelta = _degreesToRadians(secondLatitude - firstLatitude);
+    final longitudeDelta = _degreesToRadians(secondLongitude - firstLongitude);
+    final a = math.sin(latitudeDelta / 2) * math.sin(latitudeDelta / 2) +
+        math.cos(_degreesToRadians(firstLatitude)) *
+            math.cos(_degreesToRadians(secondLatitude)) *
+            math.sin(longitudeDelta / 2) *
+            math.sin(longitudeDelta / 2);
+    return earthRadiusMeters * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a));
+  }
+
+  double _degreesToRadians(double value) => value * math.pi / 180;
 
   Future<void> _upsertUserStatsForAttempt(
     Transaction txn,
@@ -934,5 +1634,12 @@ class DatabaseHelper {
     if (value is double) return value;
     if (value is num) return value.toDouble();
     return double.tryParse(value.toString()) ?? 0;
+  }
+
+  int? _asInt(Object? value) {
+    if (value == null) return null;
+    if (value is int) return value;
+    if (value is num) return value.toInt();
+    return int.tryParse(value.toString());
   }
 }

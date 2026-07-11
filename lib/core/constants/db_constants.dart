@@ -2,13 +2,17 @@ class DbConstants {
   DbConstants._();
 
   static const String databaseName = 'gabarita.db';
-  static const int databaseVersion = 2;
+  static const int databaseVersion = 6;
 
   static const String tableUsers = 'users';
   static const String tableQuestions = 'questions';
   static const String tableAttempts = 'attempts';
   static const String tableUserStats = 'user_stats';
   static const String tableStudySessions = 'study_sessions';
+  static const String tableStudyProgress = 'study_progress';
+  static const String tableStudyPlaces = 'study_places';
+  static const String tableSimuladoQuestionHistory =
+      'simulado_question_history';
 
   static const String colUserId = 'id';
   static const String colUserName = 'name';
@@ -73,4 +77,24 @@ class DbConstants {
   static const String colSessionLocationName = 'location_name';
   static const String colSessionStartedAt = 'started_at';
   static const String colSessionFinishedAt = 'finished_at';
+
+  static const String colProgressUserId = 'user_id';
+  static const String colProgressCurrentStreak = 'current_streak';
+  static const String colProgressMaxStreak = 'max_streak';
+  static const String colProgressWeeklyGoalQuestions = 'weekly_goal_questions';
+  static const String colProgressWeeklyAnsweredQuestions =
+      'weekly_answered_questions';
+  static const String colProgressLastStudyDate = 'last_study_date';
+  static const String colProgressWeekStartedAt = 'week_started_at';
+
+  static const String colStudyPlaceId = 'id';
+  static const String colStudyPlaceName = 'name';
+  static const String colStudyPlaceLatitude = 'latitude';
+  static const String colStudyPlaceLongitude = 'longitude';
+  static const String colStudyPlaceCreatedAt = 'created_at';
+  static const String colStudyPlaceLastSeenAt = 'last_seen_at';
+
+  static const String colSimuladoHistoryQuestionId = 'question_id';
+  static const String colSimuladoHistoryLastSelectedAt = 'last_selected_at';
+  static const String colSimuladoHistorySelectionCount = 'selection_count';
 }

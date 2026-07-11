@@ -22,6 +22,11 @@ abstract class IQuestionRepository {
     String? searchText,
     int? limit,
   });
+  Future<List<Question>> getSimuladoQuestions({
+    required int quantity,
+    List<String>? subjects,
+    String? examSource,
+  });
   Future<List<Question>> getWrongQuestions(int userId);
   Future<List<Question>> getFavoriteQuestions();
   Future<int> toggleFavorite(int questionId, bool isFavorite);

@@ -6,7 +6,6 @@ import 'package:home_widget/home_widget.dart';
 import '../../data/datasources/local/database_helper.dart';
 import '../../data/repositories/attempt_repository_impl.dart';
 import '../../data/repositories/question_repository_impl.dart';
-import '../../data/repositories/study_progress_repository_impl.dart';
 import '../../data/repositories/user_repository_impl.dart';
 import '../../domain/entities/attempt.dart';
 import '../../domain/entities/question.dart';
@@ -25,9 +24,7 @@ class HomeWidgetService {
   ];
 
   static Future<void> initialize({int userId = 1}) async {
-    await HomeWidget.registerInteractivityCallback(
-      gabaritaHomeWidgetCallback,
-    );
+    await HomeWidget.registerInteractivityCallback(gabaritaHomeWidgetCallback);
     await refreshWidgets(userId: userId);
   }
 
@@ -37,15 +34,17 @@ class HomeWidgetService {
       final questionRepository = QuestionRepositoryImpl(dbHelper: db);
       final user = await GetOrCreateUser(UserRepositoryImpl(db))();
       final resolvedUserId = user.id ?? userId;
-      final dailyQuestion =
-          await questionRepository.getDailyChallenge(resolvedUserId);
+      final dailyQuestion = await questionRepository.getDailyChallenge(
+        resolvedUserId,
+      );
       final todayCount = await db.getTodayAnsweredCount(resolvedUserId);
       final weeklySeries = await db.getWeeklyAccuracyPercentages(
         resolvedUserId,
       );
       final lastTopic = await db.getLastStudiedTopic(resolvedUserId);
-      final bestLocation =
-          await db.getBestStudyLocationComparison(resolvedUserId);
+      final bestLocation = await db.getBestStudyLocationComparison(
+        resolvedUserId,
+      );
 
       await Future.wait([
         _saveDailyChallenge(dailyQuestion, userId: resolvedUserId),
@@ -79,10 +78,11 @@ class HomeWidgetService {
     if (uri == null || uri.host != 'daily-answer') return;
 
     final selected = uri.queryParameters['selected']?.toUpperCase();
-    final correct =
-        (await HomeWidget.getWidgetData<String>('daily_correct_option'))
-            ?.toUpperCase();
-    final alreadyAnswered = await HomeWidget.getWidgetData<bool>(
+    final correct = (await HomeWidget.getWidgetData<String>(
+      'daily_correct_option',
+    ))?.toUpperCase();
+    final alreadyAnswered =
+        await HomeWidget.getWidgetData<bool>(
           'daily_answered',
           defaultValue: false,
         ) ??
@@ -96,10 +96,7 @@ class HomeWidgetService {
     }
 
     final isCorrect = selected == correct;
-    await _saveWidgetAttempt(
-      selectedOption: selected,
-      isCorrect: isCorrect,
-    );
+    await _saveWidgetAttempt(selectedOption: selected, isCorrect: isCorrect);
     await HomeWidget.saveWidgetData<String>('daily_selected_option', selected);
     await HomeWidget.saveWidgetData<String>(
       'daily_result',
@@ -112,7 +109,8 @@ class HomeWidgetService {
 
     try {
       await HomeWidget.updateWidget(
-          androidName: 'DailyChallengeWidgetProvider');
+        androidName: 'DailyChallengeWidgetProvider',
+      );
       await HomeWidget.updateWidget(androidName: 'QuickStatsWidgetProvider');
     } catch (_) {}
   }
@@ -122,7 +120,9 @@ class HomeWidgetService {
     required int userId,
   }) async {
     await HomeWidget.saveWidgetData<int>(
-        'daily_question_id', question?.id ?? 0);
+      'daily_question_id',
+      question?.id ?? 0,
+    );
     await HomeWidget.saveWidgetData<int>('daily_user_id', userId);
     await HomeWidget.saveWidgetData<String>(
       'daily_subject',
@@ -169,7 +169,8 @@ class HomeWidgetService {
     required String selectedOption,
     required bool isCorrect,
   }) async {
-    final questionId = await HomeWidget.getWidgetData<int>(
+    final questionId =
+        await HomeWidget.getWidgetData<int>(
           'daily_question_id',
           defaultValue: 0,
         ) ??
@@ -181,11 +182,7 @@ class HomeWidgetService {
     final userId = user.id ?? 1;
     await HomeWidget.saveWidgetData<int>('daily_user_id', userId);
 
-    final saveAttempt = SaveAttempt(
-      AttemptRepositoryImpl(db),
-      userRepository: UserRepositoryImpl(db),
-      studyProgressRepository: StudyProgressRepositoryImpl(),
-    );
+    final saveAttempt = SaveAttempt(AttemptRepositoryImpl(db));
     await saveAttempt(
       Attempt(
         userId: userId,

@@ -56,15 +56,19 @@ class _AnswerScreenState extends State<AnswerScreen> {
   }
 
   Future<void> _startFocusSensor() async {
-    await _accelerometerService.startListening(
-      onChanged: (isFocusMode) {
-        if (!mounted) return;
-        setState(() {
-          _focusModeActive = isFocusMode;
-        });
-      },
-      onError: (_, __) {},
-    );
+    try {
+      await _accelerometerService.startListening(
+        onChanged: (isFocusMode) {
+          if (!mounted) return;
+          setState(() {
+            _focusModeActive = isFocusMode;
+          });
+        },
+        onError: (_, __) {},
+      );
+    } catch (_) {
+      // O sensor é um recurso opcional e não pode interromper o treino.
+    }
   }
 
   @override
@@ -95,8 +99,9 @@ class _AnswerScreenState extends State<AnswerScreen> {
                             child: LinearProgressIndicator(
                               value: provider.progress,
                               minHeight: 8,
-                              borderRadius:
-                                  const BorderRadius.all(Radius.circular(8)),
+                              borderRadius: const BorderRadius.all(
+                                Radius.circular(8),
+                              ),
                               backgroundColor: const Color(0xFF223044),
                               valueColor: const AlwaysStoppedAnimation<Color>(
                                 Color(0xFF4DA3FF),
@@ -123,8 +128,12 @@ class _AnswerScreenState extends State<AnswerScreen> {
                               ),
                             )
                           : SingleChildScrollView(
-                              padding:
-                                  const EdgeInsets.fromLTRB(18, 12, 18, 18),
+                              padding: const EdgeInsets.fromLTRB(
+                                18,
+                                12,
+                                18,
+                                18,
+                              ),
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
@@ -136,7 +145,8 @@ class _AnswerScreenState extends State<AnswerScreen> {
                                     ),
                                   ),
                                   if (_hasQuestionImage(
-                                      question.imagePath)) ...[
+                                    question.imagePath,
+                                  )) ...[
                                     const SizedBox(height: 12),
                                     ClipRRect(
                                       borderRadius: BorderRadius.circular(8),
@@ -159,7 +169,7 @@ class _AnswerScreenState extends State<AnswerScreen> {
                                       ),
                                     ),
                                     child: MarkdownBody(
-                                      data: question.text,
+                                      data: _offlineMarkdown(question.text),
                                       selectable: true,
                                       styleSheet: _markdownStyle(
                                         context,
@@ -174,8 +184,9 @@ class _AnswerScreenState extends State<AnswerScreen> {
                                     shrinkWrap: true,
                                     physics:
                                         const NeverScrollableScrollPhysics(),
-                                    children:
-                                        question.options.entries.map((entry) {
+                                    children: question.options.entries.map((
+                                      entry,
+                                    ) {
                                       final selected =
                                           provider.selectedOption == entry.key;
                                       return GestureDetector(
@@ -183,15 +194,17 @@ class _AnswerScreenState extends State<AnswerScreen> {
                                           provider.selectAlternative(entry.key);
                                         },
                                         child: Container(
-                                          margin:
-                                              const EdgeInsets.only(bottom: 12),
+                                          margin: const EdgeInsets.only(
+                                            bottom: 12,
+                                          ),
                                           padding: const EdgeInsets.all(14),
                                           decoration: BoxDecoration(
                                             color: selected
                                                 ? const Color(0xFF12395C)
                                                 : const Color(0xFF0E131B),
-                                            borderRadius:
-                                                BorderRadius.circular(8),
+                                            borderRadius: BorderRadius.circular(
+                                              8,
+                                            ),
                                             border: Border.all(
                                               color: selected
                                                   ? const Color(0xFF4DA3FF)
@@ -218,7 +231,9 @@ class _AnswerScreenState extends State<AnswerScreen> {
                                                 child: MarkdownBody(
                                                   data: entry.value.isEmpty
                                                       ? 'Alternativa sem texto'
-                                                      : entry.value,
+                                                      : _offlineMarkdown(
+                                                          entry.value,
+                                                        ),
                                                   styleSheet: _markdownStyle(
                                                     context,
                                                     fontSize: 15,
@@ -318,6 +333,7 @@ class _AnswerScreenState extends State<AnswerScreen> {
         longitude: studyLocation?.longitude,
         locationName: locationName,
       );
+      if (sessionProvider.errorMessage != null) return;
       provider.registerAnsweredFeedback(
         question: question,
         selectedOption: selectedOption,
@@ -364,8 +380,12 @@ class _AnswerScreenState extends State<AnswerScreen> {
     }
   }
 
-  Future<String?> _resolveStudyLocationName(StudyLocation? location) {
-    return _studyPlaceService.resolvePlaceName(location);
+  Future<String?> _resolveStudyLocationName(StudyLocation? location) async {
+    try {
+      return await _studyPlaceService.resolvePlaceName(location);
+    } catch (_) {
+      return null;
+    }
   }
 
   Future<void> _afterAttemptSaved({
@@ -375,12 +395,16 @@ class _AnswerScreenState extends State<AnswerScreen> {
     required bool isCorrect,
   }) async {
     if (!isCorrect && questionId != null) {
-      await _notificationService.scheduleWrongQuestionReview(
-        questionId: questionId,
-        questionTopic: questionTopic,
-      );
+      try {
+        await _notificationService.scheduleWrongQuestionReview(
+          questionId: questionId,
+          questionTopic: questionTopic,
+        );
+      } catch (_) {}
     }
-    await HomeWidgetService.refreshWidgets(userId: userId);
+    try {
+      await HomeWidgetService.refreshWidgets(userId: userId);
+    } catch (_) {}
   }
 
   Future<void> _refreshUserStats(int userId) async {
@@ -400,6 +424,13 @@ class _AnswerScreenState extends State<AnswerScreen> {
     return imagePath != null &&
         imagePath.isNotEmpty &&
         File(imagePath).existsSync();
+  }
+
+  String _offlineMarkdown(String value) {
+    return value.replaceAllMapped(
+      RegExp(r'!\[[^\]]*\]\([^)]*\)'),
+      (_) => '[Imagem indisponível no modo offline.]',
+    );
   }
 
   MarkdownStyleSheet _markdownStyle(

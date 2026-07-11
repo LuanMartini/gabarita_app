@@ -88,26 +88,88 @@ class EnemQuestionRemoteModel {
   final List<EnemAlternativeRemoteModel> alternatives;
 
   bool get canBecomeQuestion {
-    return title.isNotEmpty &&
+    return _hasTextualStatement &&
         year > 0 &&
         index > 0 &&
-        correctAlternative.length == 1 &&
-        alternatives.length >= 4;
+        discipline?.trim().isNotEmpty == true &&
+        _hasCompleteAlternatives &&
+        !requiresVisualResource;
+  }
+
+  bool get requiresVisualResource {
+    if (files.any((file) => file.trim().isNotEmpty)) return true;
+    if (alternatives.any((alternative) => alternative.hasFile)) return true;
+
+    return _visualReferencePatterns.any(
+      (pattern) => pattern.hasMatch(_normalizedText),
+    );
+  }
+
+  bool get _hasTextualStatement {
+    return context?.trim().isNotEmpty == true ||
+        alternativesIntroduction?.trim().isNotEmpty == true;
+  }
+
+  bool get _hasCompleteAlternatives {
+    const expectedLetters = <String>{'A', 'B', 'C', 'D', 'E'};
+    final alternativesByLetter = {
+      for (final alternative in alternatives) alternative.letter: alternative,
+    };
+
+    return alternatives.length == expectedLetters.length &&
+        alternativesByLetter.length == expectedLetters.length &&
+        alternativesByLetter.keys.toSet().containsAll(expectedLetters) &&
+        alternativesByLetter.values.every(
+          (alternative) => alternative.text.trim().isNotEmpty,
+        ) &&
+        expectedLetters.contains(correctAlternative) &&
+        alternativesByLetter[correctAlternative]?.isCorrect == true;
+  }
+
+  Iterable<String> get _textBlocks sync* {
+    yield title;
+    if (context != null) yield context!;
+    if (alternativesIntroduction != null) {
+      yield alternativesIntroduction!;
+    }
+    for (final alternative in alternatives) {
+      yield alternative.text;
+    }
+  }
+
+  String get _normalizedText {
+    return _textBlocks
+        .join(' ')
+        .toLowerCase()
+        .replaceAll(RegExp(r'[áàâãä]'), 'a')
+        .replaceAll(RegExp(r'[éêë]'), 'e')
+        .replaceAll(RegExp(r'[íîï]'), 'i')
+        .replaceAll(RegExp(r'[óôõö]'), 'o')
+        .replaceAll(RegExp(r'[úûü]'), 'u')
+        .replaceAll('ç', 'c')
+        .replaceAll('Ã¡', 'a')
+        .replaceAll('Ã ', 'a')
+        .replaceAll('Ã£', 'a')
+        .replaceAll('Ã¢', 'a')
+        .replaceAll('Ã©', 'e')
+        .replaceAll('Ãª', 'e')
+        .replaceAll('Ã­', 'i')
+        .replaceAll('Ã³', 'o')
+        .replaceAll('Ãµ', 'o')
+        .replaceAll('Ã´', 'o')
+        .replaceAll('Ãº', 'u')
+        .replaceAll('Ã§', 'c');
   }
 
   Question toQuestion() {
     final byLetter = {
       for (final alternative in alternatives) alternative.letter: alternative,
     };
-    final intro = alternativesIntroduction;
-    final imageBlocks = files.indexed.map((entry) {
-      final imageNumber = entry.$1 + 1;
-      return '![Imagem $imageNumber da questao](${entry.$2})';
-    });
     final textBlocks = <String>[
       if (context != null && context!.trim().isNotEmpty) context!.trim(),
-      if (intro != null && intro.trim().isNotEmpty) intro.trim(),
-      ...imageBlocks,
+      if (alternativesIntroduction != null &&
+          alternativesIntroduction!.trim().isNotEmpty)
+        alternativesIntroduction!.trim(),
     ];
 
     return Question(
@@ -117,14 +179,14 @@ class EnemQuestionRemoteModel {
       difficulty: 2,
       year: year,
       examSource: 'ENEM $year',
-      optionA: byLetter['A']?._markdownText ?? '',
-      optionB: byLetter['B']?._markdownText ?? '',
-      optionC: byLetter['C']?._markdownText ?? '',
-      optionD: byLetter['D']?._markdownText ?? '',
-      optionE: byLetter['E']?._markdownText,
+      optionA: byLetter['A']?.text.trim() ?? '',
+      optionB: byLetter['B']?.text.trim() ?? '',
+      optionC: byLetter['C']?.text.trim() ?? '',
+      optionD: byLetter['D']?.text.trim() ?? '',
+      optionE: byLetter['E']?.text.trim(),
       correctOption: correctAlternative,
       explanation: 'Gabarito oficial: alternativa $correctAlternative.',
-      imagePath: files.isNotEmpty ? files.first : null,
+      imagePath: null,
     );
   }
 
@@ -156,15 +218,34 @@ class EnemAlternativeRemoteModel {
   final String? file;
   final bool isCorrect;
 
-  String get _markdownText {
-    final blocks = <String>[
-      if (text.trim().isNotEmpty) text.trim(),
-      if (file != null && file!.trim().isNotEmpty)
-        '![Alternativa $letter](${file!.trim()})',
-    ];
-    return blocks.join('\n\n');
-  }
+  bool get hasFile => file?.trim().isNotEmpty == true;
 }
+
+const _visualResource =
+    r'(?:figura|figuras|grafico|graficos|tabela|tabelas|mapa|mapas|imagem|imagens|fotografia|fotografias|foto|fotos|quadro|quadros|ilustracao|ilustracoes|esquema|esquemas|diagrama|diagramas|infografico|infograficos|charge|charges)';
+
+final List<RegExp> _visualReferencePatterns = <RegExp>[
+  RegExp(
+    r'\b(?:observe|analise|veja|considere|conforme|utilize|consultando)\b[\s\S]{0,100}\b' +
+        _visualResource +
+        r'\b',
+  ),
+  RegExp(
+    r'\b' +
+        _visualResource +
+        r'\b[\s\S]{0,40}\b(?:abaixo|a seguir|seguinte|apresentad[oa]s?|mostrad[oa]s?|exibid[oa]s?|indicad[oa]s?|representad[oa]s?|ilustrad[oa]s?)\b',
+  ),
+  RegExp(
+    r'\b(?:o|a|os|as)\s+' +
+        _visualResource +
+        r'\b[\s\S]{0,40}\b(?:mostra|mostram|exibe|exibem|apresenta|apresentam|indica|indicam|representa|representam)\b',
+  ),
+  RegExp(
+    r'\b(?:dados|informacoes|valores)\s+(?:da|na|do|no)\s+' +
+        _visualResource +
+        r'\b',
+  ),
+];
 
 String _disciplineLabel(String? value) {
   switch (value) {
