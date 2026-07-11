@@ -1,14 +1,12 @@
 import 'package:flutter/foundation.dart';
 
 import '../../domain/entities/attempt.dart';
-import '../../domain/entities/enem_exam.dart';
 import '../../domain/entities/question.dart';
 import '../../domain/usecases/add_question.dart';
-import '../../domain/usecases/get_available_enem_exams.dart';
+import '../../domain/usecases/ensure_local_enem_bank.dart';
 import '../../domain/usecases/get_questions_by_filter.dart';
 import '../../domain/usecases/get_wrong_questions.dart';
 import '../../domain/usecases/save_attempt.dart';
-import '../../domain/usecases/sync_enem_questions.dart';
 import '../../domain/usecases/toggle_favorite_question.dart';
 
 enum QuestionAnswerStatus {
@@ -37,27 +35,24 @@ class AnswerFeedback {
 
 class QuestionsProvider extends ChangeNotifier {
   QuestionsProvider({
-    required GetAvailableEnemExams getAvailableEnemExams,
+    required EnsureLocalEnemBank ensureLocalEnemBank,
     required GetQuestionsByFilter getQuestionsByFilter,
     required GetWrongQuestions getWrongQuestions,
     required ToggleFavoriteQuestion toggleFavoriteQuestion,
     required SaveAttempt saveAttempt,
-    required SyncEnemQuestions syncEnemQuestions,
     required AddQuestion addQuestion,
-  })  : _getAvailableEnemExams = getAvailableEnemExams,
+  })  : _ensureLocalEnemBank = ensureLocalEnemBank,
         _getQuestionsByFilter = getQuestionsByFilter,
         _getWrongQuestions = getWrongQuestions,
         _toggleFavoriteQuestion = toggleFavoriteQuestion,
         _saveAttempt = saveAttempt,
-        _syncEnemQuestions = syncEnemQuestions,
         _addQuestion = addQuestion;
 
-  final GetAvailableEnemExams _getAvailableEnemExams;
+  final EnsureLocalEnemBank _ensureLocalEnemBank;
   final GetQuestionsByFilter _getQuestionsByFilter;
   final GetWrongQuestions _getWrongQuestions;
   final ToggleFavoriteQuestion _toggleFavoriteQuestion;
   final SaveAttempt _saveAttempt;
-  final SyncEnemQuestions _syncEnemQuestions;
   final AddQuestion _addQuestion;
 
   final Set<String> _selectedSubjects = <String>{};
@@ -67,44 +62,36 @@ class QuestionsProvider extends ChangeNotifier {
   List<Question> _wrongQuestions = <Question>[];
   List<Question> _favoriteQuestions = <Question>[];
   List<Question> _recommendedQuestions = <Question>[];
-  List<EnemExam> _availableEnemExams = <EnemExam>[];
   QuestionAnswerStatus _answerStatus = QuestionAnswerStatus.idle;
   AnswerFeedback? _lastFeedback;
-  EnemQuestionSyncResult? _lastSyncResult;
   String? _selectedOption;
   bool _favoritesOnly = false;
   bool _isLoading = false;
   bool _isSyncingEnem = false;
   bool _isSavingAnswer = false;
   int _currentIndex = 0;
-  int? _selectedEnemYear;
   String _searchText = '';
-  String? _examSource;
   String? _errorMessage;
   String? _syncMessage;
   bool _localBankReady = false;
+  Future<void>? _localBankInitialization;
 
   List<Question> get questions => List.unmodifiable(_questions);
   List<Question> get wrongQuestions => List.unmodifiable(_wrongQuestions);
   List<Question> get favoriteQuestions => List.unmodifiable(_favoriteQuestions);
   List<Question> get recommendedQuestions =>
       List.unmodifiable(_recommendedQuestions);
-  List<EnemExam> get availableEnemExams =>
-      List.unmodifiable(_availableEnemExams);
   Set<String> get selectedSubjects => Set.unmodifiable(_selectedSubjects);
   Set<int> get selectedDifficulties => Set.unmodifiable(_selectedDifficulties);
   QuestionAnswerStatus get answerStatus => _answerStatus;
   AnswerFeedback? get lastFeedback => _lastFeedback;
-  EnemQuestionSyncResult? get lastSyncResult => _lastSyncResult;
   String? get selectedOption => _selectedOption;
   bool get favoritesOnly => _favoritesOnly;
   bool get isLoading => _isLoading;
   bool get isSyncingEnem => _isSyncingEnem;
   bool get isSavingAnswer => _isSavingAnswer;
   int get currentIndex => _currentIndex;
-  int? get selectedEnemYear => _selectedEnemYear;
   String get searchText => _searchText;
-  String? get examSource => _examSource;
   String? get errorMessage => _errorMessage;
   String? get syncMessage => _syncMessage;
   bool get localBankReady => _localBankReady;
@@ -140,7 +127,6 @@ class QuestionsProvider extends ChangeNotifier {
         difficulties: _selectedDifficulties.isEmpty
             ? null
             : _selectedDifficulties.toList(),
-        examSource: _examSource,
         favoritesOnly: _favoritesOnly,
         searchText: _searchText.isEmpty ? null : _searchText,
         limit: limit,
@@ -154,40 +140,27 @@ class QuestionsProvider extends ChangeNotifier {
     }
   }
 
-  Future<void> initializeLocalEnemBank() async {
-    if (_localBankReady || _isSyncingEnem) return;
+  Future<void> initializeLocalEnemBank() {
+    if (_localBankReady) return Future<void>.value();
+    return _localBankInitialization ??= _prepareLocalEnemBank().whenComplete(
+      () => _localBankInitialization = null,
+    );
+  }
 
+  Future<void> _prepareLocalEnemBank() async {
     _isLoading = true;
     _isSyncingEnem = true;
     _errorMessage = null;
     _syncMessage = 'Preparando banco local do ENEM...';
     notifyListeners();
 
-    var imported = 0;
-    var updated = 0;
-    var fetched = 0;
-
     try {
-      _availableEnemExams = await _getAvailableEnemExams();
-      if (_availableEnemExams.isNotEmpty) {
-        _selectedEnemYear ??= _availableEnemExams.first.year;
-      }
-
-      for (final exam in _availableEnemExams) {
-        final result = await _syncEnemQuestions(
-          year: exam.year,
-          limit: 0,
-        );
-        imported += result.imported;
-        updated += result.updated;
-        fetched += result.totalFetched;
-      }
+      final result = await _ensureLocalEnemBank();
 
       _localBankReady = true;
-      _examSource = null;
-      _syncMessage = imported + updated > 0
-          ? 'Banco ENEM local pronto: ${imported + updated} questoes importadas.'
-          : 'Banco ENEM local pronto: $fetched questoes disponiveis.';
+      _syncMessage = result.didImport
+          ? 'Banco ENEM local pronto: ${result.saved} questoes salvas.'
+          : 'Banco ENEM local pronto: ${result.totalFetched} questoes no SQLite.';
       _questions = await _getQuestionsByFilter(limit: 80);
       _currentIndex = 0;
       _clearAnswerState();
@@ -201,54 +174,6 @@ class QuestionsProvider extends ChangeNotifier {
       }
     } finally {
       _isLoading = false;
-      _isSyncingEnem = false;
-      notifyListeners();
-    }
-  }
-
-  Future<void> loadAvailableEnemExams() async {
-    try {
-      _availableEnemExams = await _getAvailableEnemExams();
-      if (_availableEnemExams.isNotEmpty) {
-        _selectedEnemYear ??= _availableEnemExams.first.year;
-      }
-    } catch (_) {
-      _syncMessage = 'Nao foi possivel carregar o indice local do ENEM.';
-    } finally {
-      notifyListeners();
-    }
-  }
-
-  void setSelectedEnemYear(int year) {
-    _selectedEnemYear = year;
-    notifyListeners();
-  }
-
-  Future<void> syncSelectedEnemExam({
-    int limit = 0,
-    String? language,
-  }) async {
-    final year = _selectedEnemYear ?? 2025;
-    _isSyncingEnem = true;
-    _syncMessage = null;
-    _errorMessage = null;
-    notifyListeners();
-
-    try {
-      _lastSyncResult = await _syncEnemQuestions(
-        year: year,
-        limit: limit,
-        language: language,
-      );
-      _examSource = 'ENEM $year';
-      _syncMessage = _lastSyncResult!.saved == 0
-          ? 'ENEM $year ja estava carregado do JSON local.'
-          : 'ENEM $year importado do JSON local: ${_lastSyncResult!.saved} questoes salvas.';
-      await loadQuestions();
-    } catch (error) {
-      _syncMessage =
-          'Nao foi possivel importar o ENEM $year do JSON local. $error';
-    } finally {
       _isSyncingEnem = false;
       notifyListeners();
     }
@@ -452,12 +377,6 @@ class QuestionsProvider extends ChangeNotifier {
     await loadQuestions();
   }
 
-  Future<void> setExamSource(String? value) async {
-    _examSource = value == 'Todos' ? null : value;
-    notifyListeners();
-    await loadQuestions();
-  }
-
   Future<void> toggleFavoritesOnly() async {
     _favoritesOnly = !_favoritesOnly;
     notifyListeners();
@@ -485,7 +404,6 @@ class QuestionsProvider extends ChangeNotifier {
     _selectedSubjects.clear();
     _selectedDifficulties.clear();
     _favoritesOnly = false;
-    _examSource = null;
     _searchText = '';
     notifyListeners();
   }

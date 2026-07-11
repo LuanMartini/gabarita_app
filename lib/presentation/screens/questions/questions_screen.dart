@@ -75,7 +75,7 @@ class _QuestionsScreenState extends State<QuestionsScreen> {
                             return const [
                               PopupMenuItem(
                                 value: _QuestionMenuAction.importJson,
-                                child: Text('Importar JSON ENEM'),
+                                child: Text('Carregar todos os JSONs ENEM'),
                               ),
                               PopupMenuItem(
                                 value: _QuestionMenuAction.clearFilters,
@@ -236,10 +236,7 @@ class _QuestionsScreenState extends State<QuestionsScreen> {
   }
 
   Future<void> _refreshQuestions(QuestionsProvider provider) async {
-    await Future.wait([
-      provider.loadQuestions(),
-      provider.loadAvailableEnemExams(),
-    ]);
+    await provider.loadQuestions();
   }
 
   Future<void> _handleMenuAction(
@@ -249,7 +246,7 @@ class _QuestionsScreenState extends State<QuestionsScreen> {
   ) async {
     switch (action) {
       case _QuestionMenuAction.importJson:
-        await provider.syncSelectedEnemExam();
+        await provider.initializeLocalEnemBank();
         break;
       case _QuestionMenuAction.clearFilters:
         _searchController.clear();
@@ -280,9 +277,6 @@ class _EnemSyncCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final exams = provider.availableEnemExams;
-    final selectedYear = provider.selectedEnemYear ?? 2025;
-
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(14),
@@ -298,39 +292,15 @@ class _EnemSyncCard extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 10),
-            SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: Row(
-                children: (exams.isEmpty
-                        ? const [2025, 2024, 2023]
-                        : exams.map((exam) => exam.year).take(6).toList())
-                    .map((year) {
-                  final selected = year == selectedYear;
-                  return Padding(
-                    padding: const EdgeInsets.only(right: 8),
-                    child: ChoiceChip(
-                      label: Text(year.toString()),
-                      selected: selected,
-                      selectedColor: const Color(0xFF4DA3FF),
-                      backgroundColor: const Color(0xFF141D29),
-                      labelStyle: TextStyle(
-                        color:
-                            selected ? Colors.white : const Color(0xFFB6C2D1),
-                        fontWeight: FontWeight.w700,
-                      ),
-                      onSelected: (_) {
-                        provider.setSelectedEnemYear(year);
-                      },
-                    ),
-                  );
-                }).toList(),
-              ),
+            const Text(
+              'Questoes textuais de todos os anos disponiveis (2009 a 2025), salvas no SQLite local.',
+              style: TextStyle(color: Color(0xFF9BAABD), height: 1.35),
             ),
             const SizedBox(height: 12),
             ElevatedButton.icon(
               onPressed: provider.isSyncingEnem
                   ? null
-                  : () => provider.syncSelectedEnemExam(),
+                  : () => provider.initializeLocalEnemBank(),
               icon: provider.isSyncingEnem
                   ? const SizedBox(
                       width: 18,
@@ -340,8 +310,8 @@ class _EnemSyncCard extends StatelessWidget {
                   : const Icon(Icons.cloud_download_outlined),
               label: Text(
                 provider.isSyncingEnem
-                    ? 'Importando...'
-                    : 'Carregar ENEM $selectedYear offline',
+                    ? 'Preparando...'
+                    : 'Carregar todos os ENEMs offline',
               ),
               style: ElevatedButton.styleFrom(
                 backgroundColor: const Color(0xFF4DA3FF),

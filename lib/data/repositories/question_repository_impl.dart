@@ -1,6 +1,7 @@
 import '../../domain/entities/enem_exam.dart';
 import '../../domain/entities/question.dart';
 import '../../domain/repositories/i_question_repository.dart';
+import '../../domain/services/question_quality_policy.dart';
 import '../datasources/local/database_helper.dart';
 import '../datasources/local/enem_local_data_source.dart';
 
@@ -12,12 +13,70 @@ class QuestionRepositoryImpl implements IQuestionRepository {
         _enemLocalDataSource =
             enemLocalDataSource ?? const EnemLocalDataSource();
 
+  static const String _localEnemBankVersion = 'enem_text_bank_2009_2025_v2';
+  static const String _localEnemBankVersionKey = 'local_enem_bank_version';
+  static const String _localEnemBankYearsKey = 'local_enem_bank_years';
+
   final DatabaseHelper _dbHelper;
   final EnemLocalDataSource _enemLocalDataSource;
 
   @override
-  Future<List<EnemExam>> getAvailableEnemExams() {
-    return _enemLocalDataSource.listExams();
+  Future<LocalEnemBankSyncResult> ensureLocalEnemBank() async {
+    final storedVersion =
+        await _dbHelper.getAppSetting(_localEnemBankVersionKey);
+    final questionCount = await _dbHelper.getTotalQuestionsCount();
+
+    if (storedVersion == _localEnemBankVersion && questionCount > 0) {
+      return LocalEnemBankSyncResult(
+        imported: 0,
+        updated: 0,
+        skipped: 0,
+        totalFetched: questionCount,
+        years: _parseImportedYears(
+          await _dbHelper.getAppSetting(_localEnemBankYearsKey),
+        ),
+        didImport: false,
+      );
+    }
+
+    final exams = await _enemLocalDataSource.listExams();
+    var imported = 0;
+    var updated = 0;
+    var skipped = 0;
+    var totalFetched = 0;
+    final importedYears = <int>[];
+
+    for (final exam in exams) {
+      final result = await syncEnemQuestions(year: exam.year, limit: 0);
+      imported += result.imported;
+      updated += result.updated;
+      skipped += result.skipped;
+      totalFetched += result.totalFetched;
+      importedYears.add(result.year);
+    }
+
+    await _dbHelper.cleanQuestionBank();
+    await _dbHelper.setAppSetting(
+      _localEnemBankVersionKey,
+      _localEnemBankVersion,
+    );
+    await _dbHelper.setAppSetting(
+      _localEnemBankYearsKey,
+      importedYears.join(','),
+    );
+    await _dbHelper.setAppSetting(
+      'local_enem_bank_imported_at',
+      DateTime.now().toIso8601String(),
+    );
+
+    return LocalEnemBankSyncResult(
+      imported: imported,
+      updated: updated,
+      skipped: skipped,
+      totalFetched: totalFetched,
+      years: importedYears,
+      didImport: true,
+    );
   }
 
   @override
@@ -128,12 +187,10 @@ class QuestionRepositoryImpl implements IQuestionRepository {
   Future<List<Question>> getSimuladoQuestions({
     required int quantity,
     List<String>? subjects,
-    String? examSource,
   }) {
     return _dbHelper.getBalancedSimuladoQuestions(
       quantity: quantity,
       subjects: _expandSubjectAliases(subjects),
-      examSource: examSource,
     );
   }
 
@@ -232,7 +289,7 @@ class QuestionRepositoryImpl implements IQuestionRepository {
         optionB: 'CO e H2',
         optionC: 'O2 e N2',
         optionD: 'CH4 e NH3',
-        optionE: null,
+        optionE: 'H2 e O3',
         correctOption: 'A',
         explanation:
             'Na combustao completa, o carbono forma CO2 e o hidrogenio forma H2O.',
@@ -334,18 +391,18 @@ class QuestionRepositoryImpl implements IQuestionRepository {
   }
 
   String _questionContentKey(Question question) {
-    return <String>[
-      question.text,
-      question.optionA,
-      question.optionB,
-      question.optionC,
-      question.optionD,
-      question.optionE ?? '',
-      question.correctOption,
-    ]
-        .map(
-          (value) => value.trim().toLowerCase().replaceAll(RegExp(r'\s+'), ' '),
-        )
-        .join('|');
+    return QuestionQualityPolicy.contentKey(question);
+  }
+
+  List<int> _parseImportedYears(String? rawValue) {
+    if (rawValue == null || rawValue.trim().isEmpty) {
+      return const <int>[];
+    }
+
+    return rawValue
+        .split(',')
+        .map((value) => int.tryParse(value.trim()))
+        .whereType<int>()
+        .toList(growable: false);
   }
 }

@@ -5,7 +5,7 @@ import '../datasources/local/database_helper.dart';
 /// Persiste o progresso do único perfil local exclusivamente no SQLite.
 class StudyProgressRepositoryImpl implements IStudyProgressRepository {
   StudyProgressRepositoryImpl([DatabaseHelper? dbHelper])
-    : _dbHelper = dbHelper ?? DatabaseHelper.instance;
+      : _dbHelper = dbHelper ?? DatabaseHelper.instance;
 
   final DatabaseHelper _dbHelper;
 

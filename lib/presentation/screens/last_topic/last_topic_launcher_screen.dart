@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:home_widget/home_widget.dart';
 import 'package:provider/provider.dart';
 
+import '../../../data/datasources/local/database_helper.dart';
 import '../../providers/questions_provider.dart';
+import '../../providers/user_provider.dart';
 
 class LastTopicLauncherScreen extends StatefulWidget {
   const LastTopicLauncherScreen({super.key});
@@ -41,7 +42,9 @@ class _LastTopicLauncherScreenState extends State<LastTopicLauncherScreen> {
 
   Future<String?> _readLastSubject() async {
     try {
-      final subject = await HomeWidget.getWidgetData<String>('last_subject');
+      final userId = context.read<UserProvider>().userId;
+      final topic = await DatabaseHelper.instance.getLastStudiedTopic(userId);
+      final subject = topic?['subject']?.toString();
       if (subject == null ||
           subject.isEmpty ||
           subject == 'Comece respondendo uma questao') {

@@ -251,7 +251,7 @@ class _ScannerScreenState extends State<ScannerScreen> {
       explanation: _explanationController.text.trim().isEmpty
           ? null
           : _explanationController.text.trim(),
-      imagePath: _scannedImage?.path,
+      imagePath: null,
     );
 
     try {

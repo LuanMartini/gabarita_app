@@ -4,11 +4,13 @@ Aplicativo Flutter educacional para resolver questoes, acompanhar desempenho e d
 
 ## Entrega implementada
 
-- SQLite local com tabelas `users`, `questions`, `attempts`, `user_stats` e `study_sessions`.
-- Importacao ENEM 100% offline a partir de JSONs em `assets/data/`.
-- Nenhuma chamada para API ENEM em tempo de uso.
+- SQLite local com tabelas normalizadas para `questions`, `question_alternatives`, `attempts`, `study_sessions`, `user_stats`, `study_progress`, `favorite_questions`, `study_places`, historico de simulados e `app_settings`.
+- Importacao ENEM 100% offline a partir de JSONs empacotados em `assets/data/enem/`.
+- Simulados misturam automaticamente questoes textuais de varios anos do ENEM.
+- Limpeza do banco remove duplicadas, incompletas e questoes que dependem de imagens, graficos, tabelas ou figuras.
+- Nenhuma API, Firebase, Supabase, servidor ou requisicao HTTP na execucao do app.
 - Acelerometro: modo foco pausa o cronometro quando o celular fica virado para baixo.
-- Camera: scanner abre a camera e cadastra questao local com foto, enunciado, alternativas e gabarito.
+- Camera: scanner abre a camera como apoio e cadastra a questao local em formato textual.
 - GPS: tentativas salvam latitude/longitude quando permitido, agrupam coordenadas proximas como Casa/Biblioteca/Campus e exibem desempenho por local.
 - Notificacoes locais: lembrete de revisao e reforco espacado para questoes erradas.
 - Cinco widgets Android:
@@ -28,13 +30,22 @@ Aplicativo Flutter educacional para resolver questoes, acompanhar desempenho e d
 
 ## JSONs locais do ENEM
 
-Os arquivos ficam em:
+Os arquivos ficam em `assets/data/enem/`:
 
-- `assets/data/enem_exams.json`
-- `assets/data/enem_questions_2023.json`
-- `assets/data/enem_questions_2022.json`
+- `index.json` lista os anos disponiveis.
+- `enem_2009.json` ate `enem_2025.json` armazenam as questoes.
 
-Para adicionar uma nova prova, crie `assets/data/enem_questions_ANO.json` seguindo o mesmo formato e adicione o ano em `enem_exams.json`.
+No primeiro preparo do banco, o app importa os JSONs locais para o SQLite e grava a versao importada em `app_settings`. Depois disso, as telas e os simulados usam somente o SQLite, sem reler JSONs durante a execucao normal e sem internet.
+
+## Auditoria offline
+
+- Nao existe chamada HTTP no codigo Dart/Kotlin do app.
+- Nao existe Firebase.
+- Nao existe Supabase.
+- Nao existe API externa para questoes, simulados, estatisticas ou widgets.
+- Todas as questoes usadas no app ficam no SQLite depois da importacao inicial local.
+- Simulados usam apenas SQLite, misturam anos do ENEM e evitam repeticoes ate esgotar as questoes disponiveis.
+- Favoritos, respostas, progresso, historico, estatisticas, configuracoes e ultimo estado ficam persistidos localmente.
 
 ## Comandos de validacao
 

@@ -4,7 +4,7 @@ import 'gps_service.dart';
 /// Agrupa coordenadas próximas e mantém os nomes dos locais no SQLite.
 class StudyPlaceService {
   StudyPlaceService([DatabaseHelper? dbHelper])
-    : _dbHelper = dbHelper ?? DatabaseHelper.instance;
+      : _dbHelper = dbHelper ?? DatabaseHelper.instance;
 
   static const double _clusterRadiusMeters = 180;
   static const List<String> _defaultNames = [

@@ -2,7 +2,7 @@ class DbConstants {
   DbConstants._();
 
   static const String databaseName = 'gabarita.db';
-  static const int databaseVersion = 6;
+  static const int databaseVersion = 8;
 
   static const String tableUsers = 'users';
   static const String tableQuestions = 'questions';
@@ -13,6 +13,9 @@ class DbConstants {
   static const String tableStudyPlaces = 'study_places';
   static const String tableSimuladoQuestionHistory =
       'simulado_question_history';
+  static const String tableQuestionAlternatives = 'question_alternatives';
+  static const String tableFavoriteQuestions = 'favorite_questions';
+  static const String tableAppSettings = 'app_settings';
 
   static const String colUserId = 'id';
   static const String colUserName = 'name';
@@ -44,6 +47,13 @@ class DbConstants {
   static const String colQuestionImagePath = 'image_path';
   static const String colQuestionIsFavorite = 'is_favorite';
   static const String colQuestionCreatedAt = 'created_at';
+
+  static const String colAlternativeId = 'id';
+  static const String colAlternativeQuestionId = 'question_id';
+  static const String colAlternativeLetter = 'letter';
+  static const String colAlternativeText = 'text';
+  static const String colAlternativeIsCorrect = 'is_correct';
+  static const String colAlternativeCreatedAt = 'created_at';
 
   static const String colAttemptId = 'id';
   static const String colAttemptUserId = 'user_id';
@@ -97,4 +107,12 @@ class DbConstants {
   static const String colSimuladoHistoryQuestionId = 'question_id';
   static const String colSimuladoHistoryLastSelectedAt = 'last_selected_at';
   static const String colSimuladoHistorySelectionCount = 'selection_count';
+
+  static const String colFavoriteUserId = 'user_id';
+  static const String colFavoriteQuestionId = 'question_id';
+  static const String colFavoriteCreatedAt = 'created_at';
+
+  static const String colAppSettingKey = 'key';
+  static const String colAppSettingValue = 'value';
+  static const String colAppSettingUpdatedAt = 'updated_at';
 }

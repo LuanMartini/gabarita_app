@@ -1,4 +1,5 @@
 import '../../domain/entities/question.dart';
+import '../../domain/services/question_quality_policy.dart';
 
 class EnemQuestionsPage {
   const EnemQuestionsPage({
@@ -11,9 +12,9 @@ class EnemQuestionsPage {
 
   factory EnemQuestionsPage.fromMap(Map<String, dynamic> map) {
     final metadata = map['metadata'];
+    final rawQuestions = map['questions'];
     final meta =
         metadata is Map<String, dynamic> ? metadata : const <String, dynamic>{};
-    final rawQuestions = map['questions'];
 
     return EnemQuestionsPage(
       limit: _asInt(meta['limit']) ?? 0,
@@ -97,75 +98,20 @@ class EnemQuestionRemoteModel {
   }
 
   bool get requiresVisualResource {
-    if (files.any((file) => file.trim().isNotEmpty)) return true;
-    if (alternatives.any((alternative) => alternative.hasFile)) return true;
-
-    return _visualReferencePatterns.any(
-      (pattern) => pattern.hasMatch(_normalizedText),
+    return QuestionQualityPolicy.hasVisualDependency(
+      textBlocks: _textBlocks,
+      files: <String?>[
+        ...files,
+        ...alternatives.map((alternative) => alternative.file),
+      ],
     );
   }
 
-  bool get _hasTextualStatement {
-    return context?.trim().isNotEmpty == true ||
-        alternativesIntroduction?.trim().isNotEmpty == true;
-  }
-
-  bool get _hasCompleteAlternatives {
-    const expectedLetters = <String>{'A', 'B', 'C', 'D', 'E'};
-    final alternativesByLetter = {
-      for (final alternative in alternatives) alternative.letter: alternative,
-    };
-
-    return alternatives.length == expectedLetters.length &&
-        alternativesByLetter.length == expectedLetters.length &&
-        alternativesByLetter.keys.toSet().containsAll(expectedLetters) &&
-        alternativesByLetter.values.every(
-          (alternative) => alternative.text.trim().isNotEmpty,
-        ) &&
-        expectedLetters.contains(correctAlternative) &&
-        alternativesByLetter[correctAlternative]?.isCorrect == true;
-  }
-
-  Iterable<String> get _textBlocks sync* {
-    yield title;
-    if (context != null) yield context!;
-    if (alternativesIntroduction != null) {
-      yield alternativesIntroduction!;
-    }
-    for (final alternative in alternatives) {
-      yield alternative.text;
-    }
-  }
-
-  String get _normalizedText {
-    return _textBlocks
-        .join(' ')
-        .toLowerCase()
-        .replaceAll(RegExp(r'[áàâãä]'), 'a')
-        .replaceAll(RegExp(r'[éêë]'), 'e')
-        .replaceAll(RegExp(r'[íîï]'), 'i')
-        .replaceAll(RegExp(r'[óôõö]'), 'o')
-        .replaceAll(RegExp(r'[úûü]'), 'u')
-        .replaceAll('ç', 'c')
-        .replaceAll('Ã¡', 'a')
-        .replaceAll('Ã ', 'a')
-        .replaceAll('Ã£', 'a')
-        .replaceAll('Ã¢', 'a')
-        .replaceAll('Ã©', 'e')
-        .replaceAll('Ãª', 'e')
-        .replaceAll('Ã­', 'i')
-        .replaceAll('Ã³', 'o')
-        .replaceAll('Ãµ', 'o')
-        .replaceAll('Ã´', 'o')
-        .replaceAll('Ãº', 'u')
-        .replaceAll('Ã§', 'c');
-  }
-
   Question toQuestion() {
-    final byLetter = {
+    final byLetter = <String, EnemAlternativeRemoteModel>{
       for (final alternative in alternatives) alternative.letter: alternative,
     };
-    final textBlocks = <String>[
+    final statementBlocks = <String>[
       if (context != null && context!.trim().isNotEmpty) context!.trim(),
       if (alternativesIntroduction != null &&
           alternativesIntroduction!.trim().isNotEmpty)
@@ -173,7 +119,7 @@ class EnemQuestionRemoteModel {
     ];
 
     return Question(
-      text: textBlocks.isEmpty ? title : textBlocks.join('\n\n'),
+      text: statementBlocks.isEmpty ? title : statementBlocks.join('\n\n'),
       subject: _disciplineLabel(discipline),
       topic: _topicLabel,
       difficulty: 2,
@@ -188,6 +134,37 @@ class EnemQuestionRemoteModel {
       explanation: 'Gabarito oficial: alternativa $correctAlternative.',
       imagePath: null,
     );
+  }
+
+  bool get _hasTextualStatement {
+    return context?.trim().isNotEmpty == true ||
+        alternativesIntroduction?.trim().isNotEmpty == true;
+  }
+
+  bool get _hasCompleteAlternatives {
+    const expectedLetters = <String>{'A', 'B', 'C', 'D', 'E'};
+    final alternativesByLetter = <String, EnemAlternativeRemoteModel>{
+      for (final alternative in alternatives) alternative.letter: alternative,
+    };
+
+    return alternatives.length == expectedLetters.length &&
+        alternativesByLetter.length == expectedLetters.length &&
+        alternativesByLetter.keys.toSet().containsAll(expectedLetters) &&
+        alternativesByLetter.values.every(
+          (alternative) => alternative.text.trim().isNotEmpty,
+        ) &&
+        expectedLetters.contains(correctAlternative);
+  }
+
+  Iterable<String> get _textBlocks sync* {
+    yield title;
+    if (context != null) yield context!;
+    if (alternativesIntroduction != null) {
+      yield alternativesIntroduction!;
+    }
+    for (final alternative in alternatives) {
+      yield alternative.text;
+    }
   }
 
   String get _topicLabel {
@@ -217,35 +194,7 @@ class EnemAlternativeRemoteModel {
   final String text;
   final String? file;
   final bool isCorrect;
-
-  bool get hasFile => file?.trim().isNotEmpty == true;
 }
-
-const _visualResource =
-    r'(?:figura|figuras|grafico|graficos|tabela|tabelas|mapa|mapas|imagem|imagens|fotografia|fotografias|foto|fotos|quadro|quadros|ilustracao|ilustracoes|esquema|esquemas|diagrama|diagramas|infografico|infograficos|charge|charges)';
-
-final List<RegExp> _visualReferencePatterns = <RegExp>[
-  RegExp(
-    r'\b(?:observe|analise|veja|considere|conforme|utilize|consultando)\b[\s\S]{0,100}\b' +
-        _visualResource +
-        r'\b',
-  ),
-  RegExp(
-    r'\b' +
-        _visualResource +
-        r'\b[\s\S]{0,40}\b(?:abaixo|a seguir|seguinte|apresentad[oa]s?|mostrad[oa]s?|exibid[oa]s?|indicad[oa]s?|representad[oa]s?|ilustrad[oa]s?)\b',
-  ),
-  RegExp(
-    r'\b(?:o|a|os|as)\s+' +
-        _visualResource +
-        r'\b[\s\S]{0,40}\b(?:mostra|mostram|exibe|exibem|apresenta|apresentam|indica|indicam|representa|representam)\b',
-  ),
-  RegExp(
-    r'\b(?:dados|informacoes|valores)\s+(?:da|na|do|no)\s+' +
-        _visualResource +
-        r'\b',
-  ),
-];
 
 String _disciplineLabel(String? value) {
   switch (value) {

@@ -15,6 +15,11 @@ import '../../domain/usecases/save_attempt.dart';
 class HomeWidgetService {
   HomeWidgetService._();
 
+  static const String _dailyQuestionIdSettingKey = 'widget_daily_question_id';
+  static const String _dailyAnsweredSettingKey = 'widget_daily_answered';
+  static const String _dailySelectedSettingKey = 'widget_daily_selected_option';
+  static const String _dailyResultSettingKey = 'widget_daily_result';
+
   static const List<String> _androidWidgetNames = [
     'DailyChallengeWidgetProvider',
     'PerformanceWidgetProvider',
@@ -78,15 +83,16 @@ class HomeWidgetService {
     if (uri == null || uri.host != 'daily-answer') return;
 
     final selected = uri.queryParameters['selected']?.toUpperCase();
-    final correct = (await HomeWidget.getWidgetData<String>(
-      'daily_correct_option',
-    ))?.toUpperCase();
-    final alreadyAnswered =
-        await HomeWidget.getWidgetData<bool>(
-          'daily_answered',
-          defaultValue: false,
+    final db = DatabaseHelper.instance;
+    final questionId = int.tryParse(
+          await db.getAppSetting(_dailyQuestionIdSettingKey) ?? '',
         ) ??
-        false;
+        0;
+    final alreadyAnswered =
+        await db.getAppSetting(_dailyAnsweredSettingKey) == 'true';
+    final question =
+        questionId > 0 ? await db.getQuestionById(questionId) : null;
+    final correct = question?.correctOption.toUpperCase();
 
     if (selected == null ||
         correct == null ||
@@ -96,7 +102,19 @@ class HomeWidgetService {
     }
 
     final isCorrect = selected == correct;
-    await _saveWidgetAttempt(selectedOption: selected, isCorrect: isCorrect);
+    await _saveWidgetAttempt(
+      questionId: questionId,
+      selectedOption: selected,
+      isCorrect: isCorrect,
+    );
+    await db.setAppSetting(_dailySelectedSettingKey, selected);
+    await db.setAppSetting(
+      _dailyResultSettingKey,
+      isCorrect
+          ? 'Voce acertou direto pelo widget.'
+          : 'Resposta $selected. Gabarito: $correct.',
+    );
+    await db.setAppSetting(_dailyAnsweredSettingKey, 'true');
     await HomeWidget.saveWidgetData<String>('daily_selected_option', selected);
     await HomeWidget.saveWidgetData<String>(
       'daily_result',
@@ -119,9 +137,16 @@ class HomeWidgetService {
     Question? question, {
     required int userId,
   }) async {
+    final questionId = question?.id ?? 0;
+    final db = DatabaseHelper.instance;
+    await db.setAppSetting(_dailyQuestionIdSettingKey, '$questionId');
+    await db.setAppSetting(_dailyAnsweredSettingKey, 'false');
+    await db.setAppSetting(_dailySelectedSettingKey, '');
+    await db.setAppSetting(_dailyResultSettingKey, '');
+
     await HomeWidget.saveWidgetData<int>(
       'daily_question_id',
-      question?.id ?? 0,
+      questionId,
     );
     await HomeWidget.saveWidgetData<int>('daily_user_id', userId);
     await HomeWidget.saveWidgetData<String>(
@@ -166,15 +191,10 @@ class HomeWidgetService {
   }
 
   static Future<void> _saveWidgetAttempt({
+    required int questionId,
     required String selectedOption,
     required bool isCorrect,
   }) async {
-    final questionId =
-        await HomeWidget.getWidgetData<int>(
-          'daily_question_id',
-          defaultValue: 0,
-        ) ??
-        0;
     if (questionId <= 0) return;
 
     final db = DatabaseHelper.instance;

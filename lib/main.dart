@@ -5,14 +5,15 @@ import 'package:home_widget/home_widget.dart';
 import 'package:provider/provider.dart';
 
 import 'core/database/database_initializer.dart';
+import 'data/datasources/local/database_helper.dart';
 import 'data/repositories/attempt_repository_impl.dart';
 import 'data/repositories/question_repository_impl.dart';
 import 'data/repositories/study_progress_repository_impl.dart';
 import 'data/repositories/study_session_repository_impl.dart';
 import 'data/repositories/user_repository_impl.dart';
 import 'domain/usecases/add_question.dart';
+import 'domain/usecases/ensure_local_enem_bank.dart';
 import 'domain/usecases/generate_simulado.dart';
-import 'domain/usecases/get_available_enem_exams.dart';
 import 'domain/usecases/get_or_create_user.dart';
 import 'domain/usecases/get_questions_by_filter.dart';
 import 'domain/usecases/get_recent_simulados.dart';
@@ -22,7 +23,6 @@ import 'domain/usecases/get_wrong_questions.dart';
 import 'domain/usecases/save_attempt.dart';
 import 'domain/usecases/save_study_session.dart';
 import 'domain/usecases/set_weekly_goal.dart';
-import 'domain/usecases/sync_enem_questions.dart';
 import 'domain/usecases/toggle_favorite_question.dart';
 import 'presentation/providers/questions_provider.dart';
 import 'presentation/providers/session_provider.dart';
@@ -145,12 +145,11 @@ class _GabaritaAppState extends State<GabaritaApp> {
         ),
         ChangeNotifierProvider<QuestionsProvider>(
           create: (_) => QuestionsProvider(
-            getAvailableEnemExams: GetAvailableEnemExams(questionRepository),
+            ensureLocalEnemBank: EnsureLocalEnemBank(questionRepository),
             getQuestionsByFilter: GetQuestionsByFilter(questionRepository),
             getWrongQuestions: GetWrongQuestions(questionRepository),
             toggleFavoriteQuestion: ToggleFavoriteQuestion(questionRepository),
             saveAttempt: saveAttempt,
-            syncEnemQuestions: SyncEnemQuestions(questionRepository),
             addQuestion: AddQuestion(questionRepository),
           )..initializeLocalEnemBank(),
         ),
@@ -222,6 +221,8 @@ class MainNavigationScreen extends StatefulWidget {
 }
 
 class _MainNavigationScreenState extends State<MainNavigationScreen> {
+  static const String _lastTabSettingKey = 'last_selected_tab';
+
   int _selectedIndex = 0;
 
   static const List<Widget> _screens = [
@@ -233,17 +234,40 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
   ];
 
   @override
+  void initState() {
+    super.initState();
+    unawaited(_restoreLastTab());
+  }
+
+  Future<void> _restoreLastTab() async {
+    final rawIndex =
+        await DatabaseHelper.instance.getAppSetting(_lastTabSettingKey);
+    final index = int.tryParse(rawIndex ?? '');
+    if (!mounted || index == null || index < 0 || index >= _screens.length) {
+      return;
+    }
+    setState(() {
+      _selectedIndex = index;
+    });
+  }
+
+  void _selectTab(int index) {
+    setState(() {
+      _selectedIndex = index;
+    });
+    unawaited(
+      DatabaseHelper.instance.setAppSetting(_lastTabSettingKey, '$index'),
+    );
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.black,
       body: IndexedStack(index: _selectedIndex, children: _screens),
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _selectedIndex,
-        onTap: (index) {
-          setState(() {
-            _selectedIndex = index;
-          });
-        },
+        onTap: _selectTab,
         items: const [
           BottomNavigationBarItem(
             icon: Icon(Icons.home_outlined),

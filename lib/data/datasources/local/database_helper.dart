@@ -12,6 +12,7 @@ import 'package:sqflite/sqflite.dart';
 
 import '../../../core/constants/db_constants.dart';
 import '../../../domain/entities/entities.dart';
+import '../../../domain/services/question_quality_policy.dart';
 import '../../models/models.dart';
 
 class QuestionUpsertResult {
@@ -74,8 +75,12 @@ class DatabaseHelper {
     await _createTableStudyProgress(db);
     await _createTableStudyPlaces(db);
     await _createTableSimuladoQuestionHistory(db);
+    await _createTableQuestionAlternatives(db);
+    await _createTableFavoriteQuestions(db);
+    await _createTableAppSettings(db);
     await _createIndexes(db);
     await _seedInitialData(db);
+    await _syncNormalizedQuestionTables(db);
   }
 
   Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
@@ -94,6 +99,15 @@ class DatabaseHelper {
     }
     if (oldVersion < 6) {
       await _cleanQuestionBank(db);
+    }
+    if (oldVersion < 7) {
+      await _cleanQuestionBank(db);
+    }
+    if (oldVersion < 8) {
+      await _createTableQuestionAlternatives(db);
+      await _createTableFavoriteQuestions(db);
+      await _createTableAppSettings(db);
+      await _syncNormalizedQuestionTables(db);
     }
     await _createIndexes(db);
   }
@@ -150,6 +164,41 @@ class DatabaseHelper {
   // ─────────────────────────────────────────────────────────
   //  DDL · Tabela: attempts
   // ─────────────────────────────────────────────────────────
+  Future<void> _createTableQuestionAlternatives(Database db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS ${DbConstants.tableQuestionAlternatives} (
+        ${DbConstants.colAlternativeId} INTEGER PRIMARY KEY AUTOINCREMENT,
+        ${DbConstants.colAlternativeQuestionId} INTEGER NOT NULL REFERENCES ${DbConstants.tableQuestions}(id) ON DELETE CASCADE,
+        ${DbConstants.colAlternativeLetter} TEXT NOT NULL CHECK(${DbConstants.colAlternativeLetter} IN ('A','B','C','D','E')),
+        ${DbConstants.colAlternativeText} TEXT NOT NULL,
+        ${DbConstants.colAlternativeIsCorrect} INTEGER NOT NULL DEFAULT 0,
+        ${DbConstants.colAlternativeCreatedAt} TEXT NOT NULL,
+        UNIQUE(${DbConstants.colAlternativeQuestionId}, ${DbConstants.colAlternativeLetter})
+      )
+    ''');
+  }
+
+  Future<void> _createTableFavoriteQuestions(Database db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS ${DbConstants.tableFavoriteQuestions} (
+        ${DbConstants.colFavoriteUserId} INTEGER NOT NULL REFERENCES ${DbConstants.tableUsers}(id) ON DELETE CASCADE,
+        ${DbConstants.colFavoriteQuestionId} INTEGER NOT NULL REFERENCES ${DbConstants.tableQuestions}(id) ON DELETE CASCADE,
+        ${DbConstants.colFavoriteCreatedAt} TEXT NOT NULL,
+        PRIMARY KEY (${DbConstants.colFavoriteUserId}, ${DbConstants.colFavoriteQuestionId})
+      )
+    ''');
+  }
+
+  Future<void> _createTableAppSettings(Database db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS ${DbConstants.tableAppSettings} (
+        ${DbConstants.colAppSettingKey} TEXT PRIMARY KEY,
+        ${DbConstants.colAppSettingValue} TEXT NOT NULL,
+        ${DbConstants.colAppSettingUpdatedAt} TEXT NOT NULL
+      )
+    ''');
+  }
+
   Future<void> _createTableAttempts(Database db) async {
     await db.execute('''
       CREATE TABLE IF NOT EXISTS ${DbConstants.tableAttempts} (
@@ -292,6 +341,18 @@ class DatabaseHelper {
     await db.execute('''
       CREATE INDEX IF NOT EXISTS idx_simulado_history_last_selected
         ON ${DbConstants.tableSimuladoQuestionHistory}(${DbConstants.colSimuladoHistoryLastSelectedAt})
+    ''');
+    await db.execute('''
+      CREATE INDEX IF NOT EXISTS idx_alternatives_question
+        ON ${DbConstants.tableQuestionAlternatives}(${DbConstants.colAlternativeQuestionId}, ${DbConstants.colAlternativeLetter})
+    ''');
+    await db.execute('''
+      CREATE INDEX IF NOT EXISTS idx_favorites_question
+        ON ${DbConstants.tableFavoriteQuestions}(${DbConstants.colFavoriteQuestionId})
+    ''');
+    await db.execute('''
+      CREATE INDEX IF NOT EXISTS idx_app_settings_updated_at
+        ON ${DbConstants.tableAppSettings}(${DbConstants.colAppSettingUpdatedAt})
     ''');
   }
 
@@ -469,13 +530,32 @@ class DatabaseHelper {
   // ══════════════════════════════════════════════════════════
 
   Future<int> insertQuestion(Question question) async {
+    if (!_isUsableQuestion(question)) {
+      throw ArgumentError('Questao incompleta ou dependente de imagem.');
+    }
+
     final db = await database;
-    final model = QuestionModel.fromEntity(question);
-    return await db.insert(
-      DbConstants.tableQuestions,
-      model.toMap(),
-      conflictAlgorithm: ConflictAlgorithm.abort,
-    );
+    return db.transaction((txn) async {
+      final model = QuestionModel.fromEntity(question);
+      final questionId = await txn.insert(
+        DbConstants.tableQuestions,
+        model.toMap(),
+        conflictAlgorithm: ConflictAlgorithm.abort,
+      );
+      await _replaceQuestionAlternatives(
+        txn,
+        model.copyWith(id: questionId),
+      );
+      if (question.isFavorite) {
+        await _setFavoriteInTransaction(
+          txn,
+          userId: 1,
+          questionId: questionId,
+          isFavorite: true,
+        );
+      }
+      return questionId;
+    });
   }
 
   Future<List<QuestionModel>> getAllQuestions() async {
@@ -488,6 +568,18 @@ class DatabaseHelper {
   }
 
   /// Busca com filtros combinados (matéria, dificuldade, fonte, favoritos)
+  Future<QuestionModel?> getQuestionById(int id) async {
+    final db = await database;
+    final maps = await db.query(
+      DbConstants.tableQuestions,
+      where: '${DbConstants.colQuestionId} = ?',
+      whereArgs: [id],
+      limit: 1,
+    );
+    if (maps.isEmpty) return null;
+    return QuestionModel.fromMap(maps.first);
+  }
+
   Future<List<QuestionModel>> getFilteredQuestions({
     List<String>? subjects,
     List<int>? difficulties, // 1=Fácil, 2=Médio, 3=Difícil
@@ -520,7 +612,16 @@ class DatabaseHelper {
     }
 
     if (favoritesOnly == true) {
-      whereClauses.add('${DbConstants.colQuestionIsFavorite} = 1');
+      whereClauses.add('''
+        (
+          ${DbConstants.colQuestionIsFavorite} = 1
+          OR ${DbConstants.colQuestionId} IN (
+            SELECT ${DbConstants.colFavoriteQuestionId}
+            FROM ${DbConstants.tableFavoriteQuestions}
+            WHERE ${DbConstants.colFavoriteUserId} = 1
+          )
+        )
+      ''');
     }
 
     if (searchText != null && searchText.isNotEmpty) {
@@ -554,11 +655,11 @@ class DatabaseHelper {
   Future<List<QuestionModel>> getBalancedSimuladoQuestions({
     required int quantity,
     List<String>? subjects,
-    String? examSource,
   }) async {
     if (quantity <= 0) return const <QuestionModel>[];
 
     final db = await database;
+    final random = math.Random.secure();
     final whereClauses = <String>[
       'q.${DbConstants.colQuestionYear} IS NOT NULL',
       "q.${DbConstants.colQuestionExamSource} LIKE 'ENEM %'",
@@ -581,11 +682,6 @@ class DatabaseHelper {
         'q.${DbConstants.colQuestionSubject} IN ($placeholders)',
       );
       whereArgs.addAll(subjects);
-    }
-
-    if (examSource != null && examSource.trim().isNotEmpty) {
-      whereClauses.add('q.${DbConstants.colQuestionExamSource} = ?');
-      whereArgs.add(examSource.trim());
     }
 
     final rows = await db.rawQuery(
@@ -611,7 +707,8 @@ class DatabaseHelper {
           ),
         )
         .where((candidate) => candidate.year > 0)
-        .toList(growable: false);
+        .toList(growable: false)
+      ..shuffle(random);
 
     final unseen = candidates
         .where((candidate) => candidate.lastSelectedAt == null)
@@ -655,7 +752,12 @@ class DatabaseHelper {
       questionsByYear.putIfAbsent(candidate.year, () => []).add(candidate);
     }
 
-    final years = questionsByYear.keys.toList()..shuffle(math.Random.secure());
+    final random = math.Random.secure();
+    for (final questions in questionsByYear.values) {
+      questions.shuffle(random);
+    }
+
+    final years = questionsByYear.keys.toList()..shuffle(random);
     final selected = <_SimuladoCandidate>[];
 
     while (selected.length < quantity && years.isNotEmpty) {
@@ -723,22 +825,37 @@ class DatabaseHelper {
   /// Questões favoritas
   Future<List<QuestionModel>> getFavoriteQuestions() async {
     final db = await database;
-    final maps = await db.query(
-      DbConstants.tableQuestions,
-      where: '${DbConstants.colQuestionIsFavorite} = 1',
-      orderBy: '${DbConstants.colQuestionCreatedAt} DESC',
+    final maps = await db.rawQuery(
+      '''
+      SELECT DISTINCT q.*
+      FROM ${DbConstants.tableQuestions} q
+      LEFT JOIN ${DbConstants.tableFavoriteQuestions} f
+        ON f.${DbConstants.colFavoriteQuestionId} = q.${DbConstants.colQuestionId}
+      WHERE q.${DbConstants.colQuestionIsFavorite} = 1
+        OR f.${DbConstants.colFavoriteUserId} = 1
+      ORDER BY q.${DbConstants.colQuestionCreatedAt} DESC
+      ''',
     );
     return maps.map(QuestionModel.fromMap).toList();
   }
 
   Future<int> toggleFavorite(int questionId, bool newValue) async {
     final db = await database;
-    return await db.update(
-      DbConstants.tableQuestions,
-      {DbConstants.colQuestionIsFavorite: newValue ? 1 : 0},
-      where: '${DbConstants.colQuestionId} = ?',
-      whereArgs: [questionId],
-    );
+    return db.transaction((txn) async {
+      final updated = await txn.update(
+        DbConstants.tableQuestions,
+        {DbConstants.colQuestionIsFavorite: newValue ? 1 : 0},
+        where: '${DbConstants.colQuestionId} = ?',
+        whereArgs: [questionId],
+      );
+      await _setFavoriteInTransaction(
+        txn,
+        userId: 1,
+        questionId: questionId,
+        isFavorite: newValue,
+      );
+      return updated;
+    });
   }
 
   Future<int> getTotalQuestionsCount() async {
@@ -760,6 +877,32 @@ class DatabaseHelper {
       [examSource],
     );
     return (result.first['count'] as int?) ?? 0;
+  }
+
+  Future<String?> getAppSetting(String key) async {
+    final db = await database;
+    final rows = await db.query(
+      DbConstants.tableAppSettings,
+      columns: [DbConstants.colAppSettingValue],
+      where: '${DbConstants.colAppSettingKey} = ?',
+      whereArgs: [key],
+      limit: 1,
+    );
+    if (rows.isEmpty) return null;
+    return rows.first[DbConstants.colAppSettingValue]?.toString();
+  }
+
+  Future<void> setAppSetting(String key, String value) async {
+    final db = await database;
+    await db.insert(
+      DbConstants.tableAppSettings,
+      {
+        DbConstants.colAppSettingKey: key,
+        DbConstants.colAppSettingValue: value,
+        DbConstants.colAppSettingUpdatedAt: DateTime.now().toIso8601String(),
+      },
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
   }
 
   // ══════════════════════════════════════════════════════════
@@ -1076,7 +1219,16 @@ class DatabaseHelper {
     }
 
     final db = await database;
-    return db.transaction((txn) => _upsertQuestions(txn, questions));
+    return db.transaction((txn) async {
+      final result = await _upsertQuestions(txn, questions);
+      await _cleanQuestionBank(txn);
+      return result;
+    });
+  }
+
+  Future<void> cleanQuestionBank() async {
+    final db = await database;
+    await db.transaction(_cleanQuestionBank);
   }
 
   Future<QuestionUpsertResult> replaceQuestionsFromSource({
@@ -1094,6 +1246,7 @@ class DatabaseHelper {
           where: '${DbConstants.colQuestionExamSource} = ?',
           whereArgs: [examSource],
         );
+        await _cleanQuestionBank(txn);
         return result;
       }
 
@@ -1104,6 +1257,7 @@ class DatabaseHelper {
             '${DbConstants.colQuestionExamSource} = ? AND ${DbConstants.colQuestionTopic} NOT IN ($placeholders)',
         whereArgs: [examSource, ...topics],
       );
+      await _cleanQuestionBank(txn);
       return result;
     });
   }
@@ -1116,6 +1270,8 @@ class DatabaseHelper {
     var updated = 0;
 
     for (final question in questions) {
+      if (!_isUsableQuestion(question)) continue;
+
       final existing = await txn.query(
         DbConstants.tableQuestions,
         columns: [
@@ -1130,10 +1286,20 @@ class DatabaseHelper {
       );
 
       if (existing.isEmpty) {
-        await txn.insert(
+        final questionId = await txn.insert(
           DbConstants.tableQuestions,
           QuestionModel.fromEntity(question).toMap(),
           conflictAlgorithm: ConflictAlgorithm.abort,
+        );
+        await _replaceQuestionAlternatives(
+          txn,
+          question.copyWith(id: questionId),
+        );
+        await _setFavoriteInTransaction(
+          txn,
+          userId: 1,
+          questionId: questionId,
+          isFavorite: question.isFavorite,
         );
         inserted++;
         continue;
@@ -1157,6 +1323,13 @@ class DatabaseHelper {
         where: '${DbConstants.colQuestionId} = ?',
         whereArgs: [stored[DbConstants.colQuestionId]],
       );
+      await _replaceQuestionAlternatives(txn, model);
+      await _setFavoriteInTransaction(
+        txn,
+        userId: 1,
+        questionId: model.id!,
+        isFavorite: model.isFavorite,
+      );
       updated++;
     }
 
@@ -1178,29 +1351,28 @@ class DatabaseHelper {
     return maps.map(StudySessionModel.fromMap).toList();
   }
 
-  Future<void> _cleanQuestionBank(Database db) async {
-    await db.delete(
-      DbConstants.tableQuestions,
-      where: '''
-        TRIM(${DbConstants.colQuestionText}) = ''
-        OR TRIM(${DbConstants.colQuestionSubject}) = ''
-        OR TRIM(${DbConstants.colQuestionTopic}) = ''
-        OR TRIM(${DbConstants.colQuestionOptionA}) = ''
-        OR TRIM(${DbConstants.colQuestionOptionB}) = ''
-        OR TRIM(${DbConstants.colQuestionOptionC}) = ''
-        OR TRIM(${DbConstants.colQuestionOptionD}) = ''
-        OR TRIM(COALESCE(${DbConstants.colQuestionOptionE}, '')) = ''
-        OR ${DbConstants.colQuestionCorrectOption} NOT IN ('A', 'B', 'C', 'D', 'E')
-        OR (
-          ${DbConstants.colQuestionExamSource} LIKE 'ENEM %'
-          AND TRIM(COALESCE(${DbConstants.colQuestionImagePath}, '')) <> ''
-        )
-      ''',
-    );
+  Future<void> _cleanQuestionBank(DatabaseExecutor db) async {
+    await _removeInvalidQuestionRecords(db);
     await _removeDuplicateQuestionRecords(db);
+    await _syncFavoriteRowsFromQuestions(db);
   }
 
-  Future<void> _removeDuplicateQuestionRecords(Database db) async {
+  Future<void> _removeInvalidQuestionRecords(DatabaseExecutor db) async {
+    final rows = await db.query(DbConstants.tableQuestions);
+
+    for (final row in rows) {
+      final question = QuestionModel.fromMap(row);
+      if (_isUsableQuestion(question)) continue;
+
+      await db.delete(
+        DbConstants.tableQuestions,
+        where: '${DbConstants.colQuestionId} = ?',
+        whereArgs: [question.id],
+      );
+    }
+  }
+
+  Future<void> _removeDuplicateQuestionRecords(DatabaseExecutor db) async {
     final rows = await db.query(
       DbConstants.tableQuestions,
       columns: [
@@ -1240,6 +1412,11 @@ class DatabaseHelper {
           whereArgs: [originalId],
         );
       }
+      await _moveFavoriteRows(
+        db,
+        fromQuestionId: duplicateId,
+        toQuestionId: originalId,
+      );
       await db.update(
         DbConstants.tableAttempts,
         {DbConstants.colAttemptQuestionId: originalId},
@@ -1260,31 +1437,168 @@ class DatabaseHelper {
   }
 
   String _questionContentKey(Map<String, Object?> row) {
-    final fields = <String>[
-      DbConstants.colQuestionExamSource,
-      DbConstants.colQuestionYear,
-      DbConstants.colQuestionText,
-      DbConstants.colQuestionOptionA,
-      DbConstants.colQuestionOptionB,
-      DbConstants.colQuestionOptionC,
-      DbConstants.colQuestionOptionD,
-      DbConstants.colQuestionOptionE,
-      DbConstants.colQuestionCorrectOption,
-    ];
-    return fields
-        .map((field) => _normalizeQuestionContent(row[field]?.toString() ?? ''))
-        .join('|');
+    return QuestionQualityPolicy.contentKey(QuestionModel.fromMap(row));
   }
 
-  String _normalizeQuestionContent(String value) {
-    return value.trim().toLowerCase().replaceAll(RegExp(r'\s+'), ' ');
+  Future<void> _syncNormalizedQuestionTables(DatabaseExecutor db) async {
+    await _syncQuestionAlternativesFromQuestions(db);
+    await _syncFavoriteRowsFromQuestions(db);
+  }
+
+  Future<void> _syncQuestionAlternativesFromQuestions(
+    DatabaseExecutor db,
+  ) async {
+    final rows = await db.query(DbConstants.tableQuestions);
+    for (final row in rows) {
+      await _replaceQuestionAlternatives(db, QuestionModel.fromMap(row));
+    }
+  }
+
+  Future<void> _syncFavoriteRowsFromQuestions(DatabaseExecutor db) async {
+    final userId = await _resolveDefaultUserId(db);
+    if (userId == null) return;
+
+    final favoriteRows = await db.query(
+      DbConstants.tableQuestions,
+      columns: [DbConstants.colQuestionId],
+      where: '${DbConstants.colQuestionIsFavorite} = 1',
+    );
+    for (final row in favoriteRows) {
+      final questionId = _asInt(row[DbConstants.colQuestionId]);
+      if (questionId == null) continue;
+      await _setFavoriteInTransaction(
+        db,
+        userId: userId,
+        questionId: questionId,
+        isFavorite: true,
+      );
+    }
+  }
+
+  Future<void> _replaceQuestionAlternatives(
+    DatabaseExecutor db,
+    Question question,
+  ) async {
+    final questionId = question.id;
+    if (questionId == null) return;
+
+    await db.delete(
+      DbConstants.tableQuestionAlternatives,
+      where: '${DbConstants.colAlternativeQuestionId} = ?',
+      whereArgs: [questionId],
+    );
+
+    final now = DateTime.now().toIso8601String();
+    for (final option in question.options.entries) {
+      final letter = option.key.trim().toUpperCase();
+      final text = option.value.trim();
+      if (letter.isEmpty || text.isEmpty) continue;
+
+      await db.insert(
+        DbConstants.tableQuestionAlternatives,
+        {
+          DbConstants.colAlternativeQuestionId: questionId,
+          DbConstants.colAlternativeLetter: letter,
+          DbConstants.colAlternativeText: text,
+          DbConstants.colAlternativeIsCorrect:
+              letter == question.correctOption.toUpperCase() ? 1 : 0,
+          DbConstants.colAlternativeCreatedAt: now,
+        },
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
+    }
+  }
+
+  Future<void> _setFavoriteInTransaction(
+    DatabaseExecutor db, {
+    required int userId,
+    required int questionId,
+    required bool isFavorite,
+  }) async {
+    if (!isFavorite) {
+      await db.delete(
+        DbConstants.tableFavoriteQuestions,
+        where:
+            '${DbConstants.colFavoriteUserId} = ? AND ${DbConstants.colFavoriteQuestionId} = ?',
+        whereArgs: [userId, questionId],
+      );
+      return;
+    }
+
+    final userRows = await db.query(
+      DbConstants.tableUsers,
+      columns: [DbConstants.colUserId],
+      where: '${DbConstants.colUserId} = ?',
+      whereArgs: [userId],
+      limit: 1,
+    );
+    if (userRows.isEmpty) return;
+
+    await db.insert(
+      DbConstants.tableFavoriteQuestions,
+      {
+        DbConstants.colFavoriteUserId: userId,
+        DbConstants.colFavoriteQuestionId: questionId,
+        DbConstants.colFavoriteCreatedAt: DateTime.now().toIso8601String(),
+      },
+      conflictAlgorithm: ConflictAlgorithm.ignore,
+    );
+  }
+
+  Future<void> _moveFavoriteRows(
+    DatabaseExecutor db, {
+    required int fromQuestionId,
+    required int toQuestionId,
+  }) async {
+    final rows = await db.query(
+      DbConstants.tableFavoriteQuestions,
+      where: '${DbConstants.colFavoriteQuestionId} = ?',
+      whereArgs: [fromQuestionId],
+    );
+    for (final row in rows) {
+      final userId = _asInt(row[DbConstants.colFavoriteUserId]);
+      if (userId == null) continue;
+      await _setFavoriteInTransaction(
+        db,
+        userId: userId,
+        questionId: toQuestionId,
+        isFavorite: true,
+      );
+    }
+    await db.delete(
+      DbConstants.tableFavoriteQuestions,
+      where: '${DbConstants.colFavoriteQuestionId} = ?',
+      whereArgs: [fromQuestionId],
+    );
+  }
+
+  Future<int?> _resolveDefaultUserId(DatabaseExecutor db) async {
+    final rows = await db.query(
+      DbConstants.tableUsers,
+      columns: [DbConstants.colUserId],
+      orderBy: '${DbConstants.colUserId} ASC',
+      limit: 1,
+    );
+    if (rows.isEmpty) return null;
+    return _asInt(rows.first[DbConstants.colUserId]);
   }
 
   // ══════════════════════════════════════════════════════════
   //  UTILITÁRIOS
   // ══════════════════════════════════════════════════════════
 
-  /// Fecha a conexão (utilizar em testes)
+  bool _isUsableQuestion(Question question) {
+    return QuestionQualityPolicy.isUsable(
+      question,
+      requireFiveAlternatives: _isEnemQuestion(question),
+    );
+  }
+
+  bool _isEnemQuestion(Question question) {
+    return question.examSource?.trim().toUpperCase().startsWith('ENEM') == true;
+  }
+
+  /// Fecha a conexao, usado principalmente pelos testes.
   Future<void> close() async {
     final db = await database;
     await db.close();
@@ -1314,6 +1628,15 @@ class DatabaseHelper {
         DbConstants.tableStudyProgress,
         where: '${DbConstants.colProgressUserId} = ?',
         whereArgs: [userId],
+      );
+      await txn.delete(
+        DbConstants.tableFavoriteQuestions,
+        where: '${DbConstants.colFavoriteUserId} = ?',
+        whereArgs: [userId],
+      );
+      await txn.update(
+        DbConstants.tableQuestions,
+        {DbConstants.colQuestionIsFavorite: 0},
       );
       await txn.update(
         DbConstants.tableUsers,

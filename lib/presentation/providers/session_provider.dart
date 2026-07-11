@@ -41,7 +41,6 @@ class SessionProvider extends ChangeNotifier {
   bool _isLoading = false;
   bool _isSaving = false;
   String? _sessionId;
-  String? _examSource;
   String? _errorMessage;
   DateTime? _startedAt;
 
@@ -55,7 +54,6 @@ class SessionProvider extends ChangeNotifier {
   bool get isLoading => _isLoading;
   bool get isSaving => _isSaving;
   String? get sessionId => _sessionId;
-  String? get examSource => _examSource;
   String? get errorMessage => _errorMessage;
 
   int get correctCount =>
@@ -114,11 +112,6 @@ class SessionProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  void setExamSource(String? value) {
-    _examSource = value == 'Todos' ? null : value;
-    notifyListeners();
-  }
-
   void toggleSubject(String subject) {
     if (_selectedSubjects.contains(subject)) {
       _selectedSubjects.remove(subject);
@@ -137,7 +130,6 @@ class SessionProvider extends ChangeNotifier {
       final questions = await _generateSimulado(
         quantity: _questionQuantity,
         subjects: _selectedSubjects.toList(),
-        examSource: _examSource,
       );
 
       if (questions.isEmpty) {

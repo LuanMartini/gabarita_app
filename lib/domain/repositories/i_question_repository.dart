@@ -2,7 +2,7 @@ import '../entities/question.dart';
 import '../entities/enem_exam.dart';
 
 abstract class IQuestionRepository {
-  Future<List<EnemExam>> getAvailableEnemExams();
+  Future<LocalEnemBankSyncResult> ensureLocalEnemBank();
   Future<EnemQuestionSyncResult> syncEnemQuestions({
     required int year,
     int limit = 0,
@@ -25,7 +25,6 @@ abstract class IQuestionRepository {
   Future<List<Question>> getSimuladoQuestions({
     required int quantity,
     List<String>? subjects,
-    String? examSource,
   });
   Future<List<Question>> getWrongQuestions(int userId);
   Future<List<Question>> getFavoriteQuestions();

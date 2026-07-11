@@ -15,8 +15,7 @@ void main() {
       'context': context,
       'correctAlternative': 'A',
       'files': files ?? <dynamic>[],
-      'alternatives':
-          alternatives ??
+      'alternatives': alternatives ??
           <Map<String, dynamic>>[
             <String, dynamic>{'letter': 'A', 'text': 'Alternativa A'},
             <String, dynamic>{'letter': 'B', 'text': 'Alternativa B'},

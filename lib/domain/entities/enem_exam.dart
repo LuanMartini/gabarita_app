@@ -36,6 +36,24 @@ class EnemQuestionSyncResult {
   final int updated;
   final int skipped;
   final int totalFetched;
+}
+
+class LocalEnemBankSyncResult {
+  const LocalEnemBankSyncResult({
+    required this.imported,
+    required this.updated,
+    required this.skipped,
+    required this.totalFetched,
+    required this.years,
+    required this.didImport,
+  });
+
+  final int imported;
+  final int updated;
+  final int skipped;
+  final int totalFetched;
+  final List<int> years;
+  final bool didImport;
 
   int get saved => imported + updated;
 }

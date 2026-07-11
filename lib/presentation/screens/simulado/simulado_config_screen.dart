@@ -228,6 +228,9 @@ class SimuladoConfigScreen extends StatelessWidget {
     SessionProvider sessionProvider,
   ) async {
     final userId = context.read<UserProvider>().userId;
+    await context.read<QuestionsProvider>().initializeLocalEnemBank();
+    if (!context.mounted) return;
+
     await sessionProvider.startSimulado(userId: userId);
     if (!context.mounted || sessionProvider.sessionQuestions.isEmpty) return;
 

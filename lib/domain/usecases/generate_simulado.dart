@@ -9,12 +9,10 @@ class GenerateSimulado {
   Future<List<Question>> call({
     required int quantity,
     List<String> subjects = const <String>[],
-    String? examSource,
   }) {
     return _questionRepository.getSimuladoQuestions(
       quantity: quantity,
       subjects: subjects.isEmpty ? null : subjects,
-      examSource: examSource,
     );
   }
 }

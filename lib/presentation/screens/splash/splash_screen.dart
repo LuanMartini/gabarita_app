@@ -101,7 +101,6 @@ class _SplashScreenState extends State<SplashScreen> {
                               ),
                             ),
                             const Spacer(),
-
                             Row(
                               children: [
                                 Text(
