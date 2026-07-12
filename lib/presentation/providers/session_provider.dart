@@ -173,7 +173,7 @@ class SessionProvider extends ChangeNotifier {
       userId: userId,
       questionId: questionId,
       sessionId: activeSessionId,
-      selectedOption: selectedOption,
+      selectedOption: Question.normalizeOption(selectedOption),
       isCorrect: question.isCorrectAnswer(selectedOption),
       timeTakenSeconds: timeTakenSeconds,
       latitude: latitude,

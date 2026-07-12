@@ -526,6 +526,16 @@ class DatabaseHelper {
     );
   }
 
+  Future<int> updateUserName({required int userId, required String name}) async {
+    final db = await database;
+    return db.update(
+      DbConstants.tableUsers,
+      {DbConstants.colUserName: name},
+      where: '${DbConstants.colUserId} = ?',
+      whereArgs: [userId],
+    );
+  }
+
   // ══════════════════════════════════════════════════════════
   //  CRUD · QUESTIONS
   // ══════════════════════════════════════════════════════════
@@ -1502,7 +1512,7 @@ class DatabaseHelper {
           DbConstants.colAlternativeLetter: letter,
           DbConstants.colAlternativeText: text,
           DbConstants.colAlternativeIsCorrect:
-              letter == question.correctOption.toUpperCase() ? 1 : 0,
+              letter == question.normalizedCorrectOption ? 1 : 0,
           DbConstants.colAlternativeCreatedAt: now,
         },
         conflictAlgorithm: ConflictAlgorithm.replace,

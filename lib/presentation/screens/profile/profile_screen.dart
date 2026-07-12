@@ -63,6 +63,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       fontWeight: FontWeight.w800,
                     ),
                   ),
+                  const SizedBox(height: 8),
+                  TextButton.icon(
+                    onPressed: user == null
+                        ? null
+                        : () => _showEditNameDialog(context, name),
+                    icon: const Icon(Icons.edit_outlined),
+                    label: const Text('Editar nome'),
+                  ),
                   const SizedBox(height: 22),
                   Container(
                     width: double.infinity,
@@ -231,5 +239,86 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final first = parts.first.substring(0, 1);
     final second = parts.length > 1 ? parts.last.substring(0, 1) : '';
     return '$first$second'.toUpperCase();
+  }
+
+  Future<void> _showEditNameDialog(BuildContext context, String currentName) {
+    final controller = TextEditingController(text: currentName);
+    final formKey = GlobalKey<FormState>();
+    final messenger = ScaffoldMessenger.of(context);
+    var isSaving = false;
+
+    return showDialog<void>(
+      context: context,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              title: const Text('Editar nome'),
+              content: Form(
+                key: formKey,
+                child: TextFormField(
+                  controller: controller,
+                  autofocus: true,
+                  textCapitalization: TextCapitalization.words,
+                  maxLength: 30,
+                  decoration: const InputDecoration(labelText: 'Nome'),
+                  validator: (value) {
+                    final name = value?.trim() ?? '';
+                    if (name.isEmpty) return 'Informe seu nome.';
+                    if (name.length < 3 || name.length > 30) {
+                      return 'Use entre 3 e 30 caracteres.';
+                    }
+                    return null;
+                  },
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: isSaving
+                      ? null
+                      : () => Navigator.of(dialogContext).pop(),
+                  child: const Text('Cancelar'),
+                ),
+                FilledButton(
+                  onPressed: isSaving
+                      ? null
+                      : () async {
+                          if (!formKey.currentState!.validate()) return;
+                          setDialogState(() => isSaving = true);
+                          try {
+                            await context
+                                .read<UserProvider>()
+                                .updateName(controller.text);
+                            if (!dialogContext.mounted) return;
+                            Navigator.of(dialogContext).pop();
+                            messenger.showSnackBar(
+                              const SnackBar(
+                                content: Text('Nome atualizado com sucesso.'),
+                              ),
+                            );
+                          } catch (_) {
+                            if (!dialogContext.mounted) return;
+                            messenger.showSnackBar(
+                              const SnackBar(
+                                content: Text('Nao foi possivel atualizar o nome.'),
+                              ),
+                            );
+                            setDialogState(() => isSaving = false);
+                          }
+                        },
+                  child: isSaving
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Text('Salvar'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    ).whenComplete(controller.dispose);
   }
 }

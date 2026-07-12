@@ -71,4 +71,30 @@ void main() {
     expect(clearedProgress.weeklyAnsweredQuestions, 0);
     expect(clearedProgress.currentStreak, 0);
   });
+
+  test('atualiza somente o nome do perfil local', () async {
+    final db = DatabaseHelper.instance;
+    final suffix = DateTime.now().microsecondsSinceEpoch;
+    final userId = await db.insertUser(
+      User(
+        name: 'Nome original $suffix',
+        currentStreak: 4,
+        totalAnswered: 12,
+        totalCorrect: 9,
+        studyGoalMinutes: 45,
+      ),
+    );
+
+    expect(
+      await db.updateUserName(userId: userId, name: 'Nome atualizado'),
+      1,
+    );
+
+    final user = await db.getUser(userId);
+    expect(user?.name, 'Nome atualizado');
+    expect(user?.currentStreak, 4);
+    expect(user?.totalAnswered, 12);
+    expect(user?.totalCorrect, 9);
+    expect(user?.studyGoalMinutes, 45);
+  });
 }

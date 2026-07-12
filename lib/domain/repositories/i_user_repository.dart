@@ -5,5 +5,6 @@ abstract class IUserRepository {
   Future<User?> getFirstUser();
   Future<int> saveUser(User user);
   Future<int> updateUser(User user);
+  Future<int> updateUserName({required int userId, required String name});
   Future<void> clearUserData(int userId);
 }

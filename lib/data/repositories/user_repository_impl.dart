@@ -29,6 +29,11 @@ class UserRepositoryImpl implements IUserRepository {
   }
 
   @override
+  Future<int> updateUserName({required int userId, required String name}) {
+    return _dbHelper.updateUserName(userId: userId, name: name);
+  }
+
+  @override
   Future<void> clearUserData(int userId) {
     return _dbHelper.clearUserData(userId);
   }

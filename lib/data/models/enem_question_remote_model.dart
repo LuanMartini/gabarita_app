@@ -66,7 +66,7 @@ class EnemQuestionRemoteModel {
           ? rawFiles.map((item) => item.toString()).toList(growable: false)
           : const <String>[],
       correctAlternative:
-          (map['correctAlternative']?.toString() ?? '').toUpperCase(),
+          (map['correctAlternative']?.toString() ?? '').trim().toUpperCase(),
       alternativesIntroduction: map['alternativesIntroduction']?.toString(),
       alternatives: rawAlternatives is List
           ? rawAlternatives
@@ -183,7 +183,7 @@ class EnemAlternativeRemoteModel {
 
   factory EnemAlternativeRemoteModel.fromMap(Map<String, dynamic> map) {
     return EnemAlternativeRemoteModel(
-      letter: (map['letter']?.toString() ?? '').toUpperCase(),
+      letter: (map['letter']?.toString() ?? '').trim().toUpperCase(),
       text: map['text']?.toString() ?? '',
       file: map['file']?.toString(),
       isCorrect: _asBool(map['isCorrect']),

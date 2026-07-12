@@ -255,7 +255,7 @@ class QuestionsProvider extends ChangeNotifier {
 
   void selectAlternative(String option) {
     if (_answerStatus == QuestionAnswerStatus.answered) return;
-    _selectedOption = option.toUpperCase();
+    _selectedOption = Question.normalizeOption(option);
     _answerStatus = QuestionAnswerStatus.selected;
     notifyListeners();
   }
@@ -300,10 +300,10 @@ class QuestionsProvider extends ChangeNotifier {
       _lastFeedback = AnswerFeedback(
         question: question,
         selectedOption: selectedOption,
-        correctOption: question.correctOption.toUpperCase(),
+        correctOption: question.normalizedCorrectOption,
         isCorrect: isCorrect,
         explanation: question.feedback,
-        xpEarned: isCorrect ? 15 : 5,
+        xpEarned: isCorrect ? 15 : 0,
       );
       _answerStatus = QuestionAnswerStatus.answered;
       return _lastFeedback;
@@ -321,14 +321,14 @@ class QuestionsProvider extends ChangeNotifier {
     required String selectedOption,
     required bool isCorrect,
   }) {
-    _selectedOption = selectedOption.toUpperCase();
+    _selectedOption = Question.normalizeOption(selectedOption);
     _lastFeedback = AnswerFeedback(
       question: question,
       selectedOption: _selectedOption!,
-      correctOption: question.correctOption.toUpperCase(),
+      correctOption: question.normalizedCorrectOption,
       isCorrect: isCorrect,
       explanation: question.feedback,
-      xpEarned: isCorrect ? 15 : 5,
+      xpEarned: isCorrect ? 15 : 0,
     );
     _answerStatus = QuestionAnswerStatus.answered;
     notifyListeners();

@@ -49,14 +49,18 @@ class Question {
 
   int get correctAlternativeIndex {
     const letters = <String>['A', 'B', 'C', 'D', 'E'];
-    final index = letters.indexOf(correctOption.toUpperCase());
+    final index = letters.indexOf(normalizedCorrectOption);
     return index < 0 ? 0 : index;
   }
+
+  String get normalizedCorrectOption => normalizeOption(correctOption);
+
+  static String normalizeOption(String option) => option.trim().toUpperCase();
 
   String get feedback => explanation ?? 'Sem explicacao cadastrada.';
 
   bool isCorrectAnswer(String selectedOption) {
-    return selectedOption.toUpperCase() == correctOption.toUpperCase();
+    return normalizeOption(selectedOption) == normalizedCorrectOption;
   }
 
   Map<String, String> get options {

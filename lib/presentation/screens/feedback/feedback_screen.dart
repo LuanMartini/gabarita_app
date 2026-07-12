@@ -22,7 +22,7 @@ class FeedbackScreen extends StatelessWidget {
         final title = isCorrect ? 'Resposta correta' : 'Resposta incorreta';
         final message = feedback == null
             ? 'Nenhuma resposta encontrada para exibir.'
-            : 'Sua resposta: ${feedback.selectedOption}  -  Gabarito: ${feedback.correctOption}\n+${feedback.xpEarned} XP';
+            : 'Sua resposta: ${feedback.selectedOption}  -  Gabarito: ${feedback.correctOption}\n${feedback.isCorrect ? '+${feedback.xpEarned} XP' : 'Nenhum XP concedido.'}';
 
         return Scaffold(
           backgroundColor: Colors.black,

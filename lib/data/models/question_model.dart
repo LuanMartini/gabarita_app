@@ -60,6 +60,7 @@ class QuestionModel extends Question {
       optionE: map[DbConstants.colQuestionOptionE] as String?,
       correctOption:
           ((map[DbConstants.colQuestionCorrectOption] as String?) ?? 'A')
+              .trim()
               .toUpperCase(),
       explanation: map[DbConstants.colQuestionExplanation] as String?,
       imagePath: map[DbConstants.colQuestionImagePath] as String?,
@@ -86,7 +87,7 @@ class QuestionModel extends Question {
       DbConstants.colQuestionOptionC: optionC,
       DbConstants.colQuestionOptionD: optionD,
       DbConstants.colQuestionOptionE: optionE,
-      DbConstants.colQuestionCorrectOption: correctOption.toUpperCase(),
+      DbConstants.colQuestionCorrectOption: normalizedCorrectOption,
       DbConstants.colQuestionExplanation: explanation,
       DbConstants.colQuestionImagePath: imagePath,
       DbConstants.colQuestionIsFavorite: isFavorite ? 1 : 0,

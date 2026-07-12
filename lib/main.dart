@@ -19,6 +19,7 @@ import 'domain/usecases/get_questions_by_filter.dart';
 import 'domain/usecases/get_recent_simulados.dart';
 import 'domain/usecases/get_study_progress.dart';
 import 'domain/usecases/get_user_statistics.dart';
+import 'domain/usecases/update_user_name.dart';
 import 'domain/usecases/get_wrong_questions.dart';
 import 'domain/usecases/save_attempt.dart';
 import 'domain/usecases/save_study_session.dart';
@@ -141,6 +142,7 @@ class _GabaritaAppState extends State<GabaritaApp> {
             getUserStatistics: getUserStatistics,
             getStudyProgress: getStudyProgress,
             setWeeklyGoal: SetWeeklyGoal(studyProgressRepository),
+            updateUserName: UpdateUserName(userRepository),
           )..loadUser(),
         ),
         ChangeNotifierProvider<QuestionsProvider>(

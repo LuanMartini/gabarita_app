@@ -6,6 +6,7 @@ import '../../domain/usecases/get_or_create_user.dart';
 import '../../domain/usecases/get_study_progress.dart';
 import '../../domain/usecases/get_user_statistics.dart';
 import '../../domain/usecases/set_weekly_goal.dart';
+import '../../domain/usecases/update_user_name.dart';
 
 class UserProvider extends ChangeNotifier {
   UserProvider({
@@ -13,15 +14,18 @@ class UserProvider extends ChangeNotifier {
     required GetUserStatistics getUserStatistics,
     required GetStudyProgress getStudyProgress,
     required SetWeeklyGoal setWeeklyGoal,
+    required UpdateUserName updateUserName,
   })  : _getOrCreateUser = getOrCreateUser,
         _getUserStatistics = getUserStatistics,
         _getStudyProgress = getStudyProgress,
-        _setWeeklyGoal = setWeeklyGoal;
+        _setWeeklyGoal = setWeeklyGoal,
+        _updateUserName = updateUserName;
 
   final GetOrCreateUser _getOrCreateUser;
   final GetUserStatistics _getUserStatistics;
   final GetStudyProgress _getStudyProgress;
   final SetWeeklyGoal _setWeeklyGoal;
+  final UpdateUserName _updateUserName;
 
   User? _user;
   UserStatistics? _statistics;
@@ -77,6 +81,18 @@ class UserProvider extends ChangeNotifier {
       _errorMessage = 'Nao foi possivel atualizar a meta semanal.';
       notifyListeners();
     }
+  }
+
+  Future<void> updateName(String name) async {
+    final user = _user;
+    if (user?.id == null) {
+      throw StateError('Perfil local nao encontrado.');
+    }
+
+    final updatedName = await _updateUserName(userId: user!.id!, name: name);
+    _user = user.copyWith(name: updatedName);
+    _errorMessage = null;
+    notifyListeners();
   }
 
   void clearError() {
