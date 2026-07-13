@@ -5,7 +5,12 @@ import '../../domain/services/question_quality_policy.dart';
 import '../datasources/local/database_helper.dart';
 import '../datasources/local/enem_local_data_source.dart';
 
+// Bloco 1 - implementacao concreta do contrato de questoes.
+// O dominio conhece apenas IQuestionRepository. Esta classe faz a ponte real
+// com o SQLite e com os arquivos JSON offline do ENEM.
 class QuestionRepositoryImpl implements IQuestionRepository {
+  // Bloco 2 - construtor com dependencias opcionais.
+  // Em producao usa os padroes; em testes pode receber banco ou datasource fake.
   QuestionRepositoryImpl({
     DatabaseHelper? dbHelper,
     EnemLocalDataSource? enemLocalDataSource,
@@ -13,19 +18,29 @@ class QuestionRepositoryImpl implements IQuestionRepository {
         _enemLocalDataSource =
             enemLocalDataSource ?? const EnemLocalDataSource();
 
+  // Bloco 3 - versao do banco local.
+  // Se os JSONs forem alterados, mudar esta string forca uma nova importacao.
   static const String _localEnemBankVersion = 'enem_text_bank_2009_2025_v2';
+
+  // Bloco 4 - chaves salvas na tabela de configuracoes do app.
   static const String _localEnemBankVersionKey = 'local_enem_bank_version';
   static const String _localEnemBankYearsKey = 'local_enem_bank_years';
 
+  // Bloco 5 - gateway para SQLite.
   final DatabaseHelper _dbHelper;
+
+  // Bloco 6 - leitor dos assets JSON do ENEM.
   final EnemLocalDataSource _enemLocalDataSource;
 
   @override
   Future<LocalEnemBankSyncResult> ensureLocalEnemBank() async {
+    // Bloco 7 - primeiro verifica se o banco local ja foi importado.
     final storedVersion =
         await _dbHelper.getAppSetting(_localEnemBankVersionKey);
     final questionCount = await _dbHelper.getTotalQuestionsCount();
 
+    // Bloco 8 - se a versao bate e ja existem questoes, nao importa de novo.
+    // Isso evita travar a tela de questoes toda vez que o app abre.
     if (storedVersion == _localEnemBankVersion && questionCount > 0) {
       return LocalEnemBankSyncResult(
         imported: 0,
@@ -39,13 +54,17 @@ class QuestionRepositoryImpl implements IQuestionRepository {
       );
     }
 
+    // Bloco 9 - lista os anos/provas disponiveis nos arquivos locais.
     final exams = await _enemLocalDataSource.listExams();
+
+    // Bloco 10 - contadores para montar o resultado final da importacao.
     var imported = 0;
     var updated = 0;
     var skipped = 0;
     var totalFetched = 0;
     final importedYears = <int>[];
 
+    // Bloco 11 - importa cada ano do ENEM encontrado no JSON local.
     for (final exam in exams) {
       final result = await syncEnemQuestions(year: exam.year, limit: 0);
       imported += result.imported;
@@ -55,7 +74,11 @@ class QuestionRepositoryImpl implements IQuestionRepository {
       importedYears.add(result.year);
     }
 
+    // Bloco 12 - remove duplicatas ou registros ruins que sobraram.
     await _dbHelper.cleanQuestionBank();
+
+    // Bloco 13 - grava metadados para a proxima abertura do app saber
+    // que o banco offline ja esta preparado.
     await _dbHelper.setAppSetting(
       _localEnemBankVersionKey,
       _localEnemBankVersion,
@@ -69,6 +92,7 @@ class QuestionRepositoryImpl implements IQuestionRepository {
       DateTime.now().toIso8601String(),
     );
 
+    // Bloco 14 - devolve para o Provider um resumo da sincronizacao local.
     return LocalEnemBankSyncResult(
       imported: imported,
       updated: updated,
@@ -85,26 +109,34 @@ class QuestionRepositoryImpl implements IQuestionRepository {
     int limit = 0,
     String? language,
   }) async {
+    // Bloco 15 - carrega questoes do JSON offline.
+    // Aqui nao existe chamada para API externa.
     final localQuestions = await _enemLocalDataSource.loadQuestions(
       year: year,
       limit: limit,
       language: language,
     );
 
+    // Bloco 16 - prepara contadores e conjuntos para evitar duplicatas.
     var skipped = 0;
     final seenNaturalKeys = <String>{};
     final seenContent = <String>{};
     final questionsToImport = <Question>[];
 
+    // Bloco 17 - percorre as questoes lidas do JSON.
     for (final localQuestion in localQuestions) {
+      // Bloco 17.1 - descarta questoes incompletas ou dependentes de imagem.
       if (!localQuestion.canBecomeQuestion) {
         skipped++;
         continue;
       }
 
+      // Bloco 17.2 - converte o registro local em entidade de dominio.
       final question = localQuestion.toQuestion();
       final naturalKey = '${localQuestion.year}|${localQuestion.index}';
       final contentKey = _questionContentKey(question);
+
+      // Bloco 17.3 - evita repetir a mesma questao pelo numero ou pelo texto.
       if (!seenNaturalKeys.add(naturalKey) || !seenContent.add(contentKey)) {
         skipped++;
         continue;
@@ -112,6 +144,9 @@ class QuestionRepositoryImpl implements IQuestionRepository {
       questionsToImport.add(question);
     }
 
+    // Bloco 18 - define como salvar.
+    // Importacao completa de um ano substitui as questoes daquela fonte.
+    // Importacao parcial usa upsert para atualizar sem apagar o restante.
     final result = language == null && limit <= 0
         ? await _dbHelper.replaceQuestionsFromSource(
             examSource: 'ENEM $year',
@@ -119,6 +154,7 @@ class QuestionRepositoryImpl implements IQuestionRepository {
           )
         : await _dbHelper.upsertQuestionsBySourceAndTopic(questionsToImport);
 
+    // Bloco 19 - devolve o resumo da importacao daquele ano.
     return EnemQuestionSyncResult(
       year: year,
       imported: result.inserted,
@@ -130,11 +166,14 @@ class QuestionRepositoryImpl implements IQuestionRepository {
 
   @override
   Future<int> insertQuestion(Question question) {
+    // Bloco 20 - salva uma questao manual/mock no banco local.
     return _dbHelper.insertQuestion(question);
   }
 
   @override
   Future<void> seedMockQuestions({bool force = false}) async {
+    // Bloco 21 - cria questoes falsas apenas quando necessario.
+    // Serve como fallback para o app abrir com conteudo mesmo antes do JSON.
     if (!force) {
       final existing = await _dbHelper.getFilteredQuestions(
         searchText: 'Uma funcao',
@@ -143,6 +182,7 @@ class QuestionRepositoryImpl implements IQuestionRepository {
       if (existing.isNotEmpty) return;
     }
 
+    // Bloco 22 - insere cada questao mock individualmente.
     for (final question in _mockQuestions()) {
       await _dbHelper.insertQuestion(question);
     }
@@ -150,11 +190,13 @@ class QuestionRepositoryImpl implements IQuestionRepository {
 
   @override
   Future<List<Question>> getQuestions() async {
+    // Bloco 23 - metodo antigo mantido para compatibilidade.
     return _dbHelper.getAllQuestions();
   }
 
   @override
   Future<List<Question>> getAllQuestions() async {
+    // Bloco 24 - busca todas as questoes do SQLite.
     return _dbHelper.getAllQuestions();
   }
 
@@ -169,10 +211,13 @@ class QuestionRepositoryImpl implements IQuestionRepository {
     String? searchText,
     int? limit,
   }) async {
+    // Bloco 25 - junta parametros antigos e novos em um formato unico.
     final resolvedSubjects = subjects ??
         (subject != null && subject.isNotEmpty ? <String>[subject] : null);
     final resolvedExamSource = examSource ?? vestibular;
 
+    // Bloco 26 - expande aliases de disciplina antes de consultar.
+    // Exemplo: "Matematica" tambem busca versoes com acento.
     return _dbHelper.getFilteredQuestions(
       subjects: _expandSubjectAliases(resolvedSubjects),
       difficulties: difficulties,
@@ -188,6 +233,7 @@ class QuestionRepositoryImpl implements IQuestionRepository {
     required int quantity,
     List<String>? subjects,
   }) {
+    // Bloco 27 - busca questoes para simulado com distribuicao mais equilibrada.
     return _dbHelper.getBalancedSimuladoQuestions(
       quantity: quantity,
       subjects: _expandSubjectAliases(subjects),
@@ -196,35 +242,42 @@ class QuestionRepositoryImpl implements IQuestionRepository {
 
   @override
   Future<List<Question>> getWrongQuestions(int userId) {
+    // Bloco 28 - busca as questoes erradas pelo usuario para revisao.
     return _dbHelper.getWrongQuestions(userId);
   }
 
   @override
   Future<List<Question>> getFavoriteQuestions() {
+    // Bloco 29 - busca as questoes favoritadas.
     return _dbHelper.getFavoriteQuestions();
   }
 
   @override
   Future<int> toggleFavorite(int questionId, bool isFavorite) {
+    // Bloco 30 - altera o favorito no banco.
     return _dbHelper.toggleFavorite(questionId, isFavorite);
   }
 
   @override
   Future<int> toggleFavoriteQuestion(int questionId, bool isFavorite) {
+    // Bloco 31 - alias para chamadas que usam outro nome.
     return toggleFavorite(questionId, isFavorite);
   }
 
   @override
   Future<int> getTotalQuestionsCount() async {
+    // Bloco 32 - total usado pela Home/Questao para mostrar tamanho do banco.
     return _dbHelper.getTotalQuestionsCount();
   }
 
   @override
   Future<Question?> getDailyChallenge(int userId) async {
+    // Bloco 33 - desafio diario evitando repetir questoes ja respondidas hoje.
     return _dbHelper.getDailyChallenge(userId);
   }
 
   List<Question> _mockQuestions() {
+    // Bloco 34 - dados falsos para demonstracao e teste rapido.
     return <Question>[
       Question(
         text:
@@ -315,10 +368,13 @@ class QuestionRepositoryImpl implements IQuestionRepository {
   }
 
   List<String>? _expandSubjectAliases(List<String>? subjects) {
+    // Bloco 35 - sem filtro de materia, devolve exatamente o valor recebido.
     if (subjects == null || subjects.isEmpty) return subjects;
 
+    // Bloco 36 - Set evita duplicar a mesma materia/alias.
     final aliases = <String>{};
     for (final subject in subjects) {
+      // Bloco 37 - sempre preserva o texto original escolhido na UI.
       aliases.add(subject);
       switch (_normalize(subject)) {
         case 'matematica':
@@ -373,6 +429,8 @@ class QuestionRepositoryImpl implements IQuestionRepository {
   }
 
   String _normalize(String value) {
+    // Bloco 38 - normalizacao simples para comparar filtros.
+    // Mantem compatibilidade com alguns textos importados com encoding antigo.
     return value
         .trim()
         .toLowerCase()
@@ -391,10 +449,12 @@ class QuestionRepositoryImpl implements IQuestionRepository {
   }
 
   String _questionContentKey(Question question) {
+    // Bloco 39 - chave de deduplicacao baseada no conteudo da questao.
     return QuestionQualityPolicy.contentKey(question);
   }
 
   List<int> _parseImportedYears(String? rawValue) {
+    // Bloco 40 - transforma "2025,2024,2023" em [2025, 2024, 2023].
     if (rawValue == null || rawValue.trim().isEmpty) {
       return const <int>[];
     }

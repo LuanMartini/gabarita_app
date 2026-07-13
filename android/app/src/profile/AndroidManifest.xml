@@ -1,3 +1,4 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <!-- Necessario apenas no build profile para comunicacao do Flutter tool. -->
+    <uses-permission android:name="android.permission.INTERNET" />
 </manifest>

@@ -45,17 +45,33 @@ import 'services/notifications/notification_service.dart';
 import 'services/widgets/home_widget_service.dart';
 
 Future<void> main() async {
+  // Bloco 1 - prepara o Flutter antes de usar plugins nativos.
+  // Sem isso, chamadas como SQLite, notificacoes e widgets nativos podem falhar
+  // porque o motor do Flutter ainda nao terminou de inicializar.
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Bloco 2 - configura a fabrica do SQLite conforme a plataforma.
+  // No Android usa SQLite normal; em testes/desktop usa a configuracao adequada.
   await initializeDatabaseFactory();
+
+  // Bloco 3 - coloca o widget raiz na tela.
+  // A partir daqui o Flutter comeca a montar a interface.
   runApp(const GabaritaApp());
+
+  // Bloco 4 - inicializa servicos extras sem bloquear a abertura do app.
+  // O unawaited deixa notificacoes e widgets carregarem em segundo plano.
   unawaited(_initializePlatformServices());
 }
 
 Future<void> _initializePlatformServices() async {
+  // Bloco 1 - tenta configurar notificacoes locais.
+  // O try/catch impede que uma falha de permissao/notificacao derrube o app.
   try {
     await NotificationService().initialize();
   } catch (_) {}
 
+  // Bloco 2 - tenta configurar os widgets da tela inicial do Android.
+  // Tambem fica protegido para nao travar o app caso o recurso nao exista.
   try {
     await HomeWidgetService.initialize();
   } catch (_) {}
@@ -69,16 +85,27 @@ class GabaritaApp extends StatefulWidget {
 }
 
 class _GabaritaAppState extends State<GabaritaApp> {
+  // Bloco 1 - chave global usada para navegar mesmo fora de uma tela especifica.
+  // Ela permite que cliques em home widgets abram rotas do app.
   final GlobalKey<NavigatorState> _navigatorKey = GlobalKey<NavigatorState>();
+
+  // Bloco 2 - assinatura do stream que avisa quando um home widget foi tocado.
+  // Guardamos a assinatura para cancelar no dispose e evitar vazamento.
   StreamSubscription<Uri?>? _homeWidgetSubscription;
 
   @override
   void initState() {
     super.initState();
+
+    // Bloco 3 - escuta cliques em widgets enquanto o app esta aberto.
+    // Quando o usuario toca num widget, recebemos uma URI com a acao.
     _homeWidgetSubscription = HomeWidget.widgetClicked.listen(
       _handleHomeWidgetLaunch,
       onError: (_, __) {},
     );
+
+    // Bloco 4 - verifica se o app foi aberto diretamente por um widget.
+    // Esse trecho roda depois do primeiro frame para garantir navegador pronto.
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       try {
         final uri = await HomeWidget.initiallyLaunchedFromHomeWidget();
@@ -89,16 +116,23 @@ class _GabaritaAppState extends State<GabaritaApp> {
 
   @override
   void dispose() {
+    // Bloco 5 - cancela a escuta dos home widgets ao destruir o app.
+    // Isso evita listener ativo depois que a tela deixou de existir.
     _homeWidgetSubscription?.cancel();
     super.dispose();
   }
 
   void _handleHomeWidgetLaunch(Uri? uri) {
+    // Bloco 6 - se nao veio nenhuma acao, nao ha nada para abrir.
     if (uri == null) return;
 
+    // Bloco 7 - recupera o navegador global.
+    // Se ele ainda nao existe, a navegacao e ignorada com seguranca.
     final navigator = _navigatorKey.currentState;
     if (navigator == null) return;
 
+    // Bloco 8 - decide qual tela abrir com base no host da URI.
+    // Exemplo: gabarita://stats abre a tela de estatisticas.
     switch (uri.host) {
       case 'scanner':
         navigator.pushNamed('/profile-photo');
@@ -122,11 +156,16 @@ class _GabaritaAppState extends State<GabaritaApp> {
 
   @override
   Widget build(BuildContext context) {
+    // Bloco 1 - cria as implementacoes de repositorio.
+    // Repositorios sao a camada que conversa com banco local e fontes de dados.
     final questionRepository = QuestionRepositoryImpl();
     final attemptRepository = AttemptRepositoryImpl();
     final userRepository = UserRepositoryImpl();
     final studyProgressRepository = StudyProgressRepositoryImpl();
     final studySessionRepository = StudySessionRepositoryImpl();
+
+    // Bloco 2 - cria use cases compartilhados por mais de um Provider.
+    // Assim a regra de salvar tentativa/estatisticas fica centralizada.
     final saveAttempt = SaveAttempt(attemptRepository);
     final getUserStatistics = GetUserStatistics(
       userRepository,
@@ -134,8 +173,11 @@ class _GabaritaAppState extends State<GabaritaApp> {
     );
     final getStudyProgress = GetStudyProgress(studyProgressRepository);
 
+    // Bloco 3 - injeta Providers no app inteiro.
+    // Qualquer tela abaixo do MaterialApp consegue acessar esses Providers.
     return MultiProvider(
       providers: [
+        // Bloco 4 - Provider do usuario, perfil, avatar, streak e meta semanal.
         ChangeNotifierProvider<UserProvider>(
           create: (_) => UserProvider(
             getOrCreateUser: GetOrCreateUser(userRepository),
@@ -146,6 +188,7 @@ class _GabaritaAppState extends State<GabaritaApp> {
             updateUserName: UpdateUserName(userRepository),
           )..loadUser(),
         ),
+        // Bloco 5 - Provider das questoes, filtros, favoritos e respostas.
         ChangeNotifierProvider<QuestionsProvider>(
           create: (_) => QuestionsProvider(
             ensureLocalEnemBank: EnsureLocalEnemBank(questionRepository),
@@ -155,6 +198,7 @@ class _GabaritaAppState extends State<GabaritaApp> {
             saveAttempt: saveAttempt,
           )..initializeLocalEnemBank(),
         ),
+        // Bloco 6 - Provider dos simulados: configuracao, andamento e historico.
         ChangeNotifierProvider<SessionProvider>(
           create: (_) => SessionProvider(
             generateSimulado: GenerateSimulado(questionRepository),
@@ -163,6 +207,7 @@ class _GabaritaAppState extends State<GabaritaApp> {
             getRecentSimulados: GetRecentSimulados(studySessionRepository),
           )..initialize(),
         ),
+        // Bloco 7 - Provider das estatisticas exibidas na tela de desempenho.
         ChangeNotifierProvider<StatisticsProvider>(
           create: (_) => StatisticsProvider(
             getOrCreateUser: GetOrCreateUser(userRepository),
@@ -172,7 +217,11 @@ class _GabaritaAppState extends State<GabaritaApp> {
         ),
       ],
       child: MaterialApp(
+        // Bloco 8 - usa a chave global para permitir navegacao via home widgets.
         navigatorKey: _navigatorKey,
+
+        // Bloco 9 - configuracao visual geral do app.
+        // Aqui fica o tema escuro, cores e estilo padrao de cards/bottom nav.
         title: 'Gabarita',
         debugShowCheckedModeBanner: false,
         theme: ThemeData(
@@ -199,6 +248,8 @@ class _GabaritaAppState extends State<GabaritaApp> {
             type: BottomNavigationBarType.fixed,
           ),
         ),
+        // Bloco 10 - rotas nomeadas.
+        // Cada string representa um caminho usado por Navigator.pushNamed.
         routes: {
           '/main': (_) => const MainNavigationScreen(),
           '/answer': (_) => const AnswerScreen(),
@@ -209,6 +260,7 @@ class _GabaritaAppState extends State<GabaritaApp> {
           '/review': (_) => const ReviewScreen(),
           '/statistics': (_) => const StatisticsScreen(),
         },
+        // Bloco 11 - primeira tela carregada ao abrir o aplicativo.
         home: const SplashScreen(),
       ),
     );
@@ -223,10 +275,15 @@ class MainNavigationScreen extends StatefulWidget {
 }
 
 class _MainNavigationScreenState extends State<MainNavigationScreen> {
+  // Bloco 1 - chave usada para lembrar qual aba ficou selecionada.
+  // Ela e salva nas configuracoes locais do SQLite.
   static const String _lastTabSettingKey = 'last_selected_tab';
 
+  // Bloco 2 - indice da aba atualmente selecionada no BottomNavigationBar.
   int _selectedIndex = 0;
 
+  // Bloco 3 - lista das telas fixas da navegacao principal.
+  // O indice dessa lista precisa bater com a ordem dos itens do bottom nav.
   static const List<Widget> _screens = [
     HomeScreen(showBottomNavigationBar: false),
     QuestionsScreen(),
@@ -238,25 +295,37 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
   @override
   void initState() {
     super.initState();
+    // Bloco 4 - tenta restaurar a ultima aba usada.
+    // unawaited porque a tela pode aparecer antes da leitura terminar.
     unawaited(_restoreLastTab());
   }
 
   Future<void> _restoreLastTab() async {
+    // Bloco 5 - le o indice salvo no banco local.
     final rawIndex =
         await DatabaseHelper.instance.getAppSetting(_lastTabSettingKey);
     final index = int.tryParse(rawIndex ?? '');
+
+    // Bloco 6 - valida se o indice ainda existe na lista de telas.
+    // Isso evita erro se a lista de abas mudar no futuro.
     if (!mounted || index == null || index < 0 || index >= _screens.length) {
       return;
     }
+
+    // Bloco 7 - atualiza a aba visivel.
     setState(() {
       _selectedIndex = index;
     });
   }
 
   void _selectTab(int index) {
+    // Bloco 8 - troca a aba visualmente.
     setState(() {
       _selectedIndex = index;
     });
+
+    // Bloco 9 - salva a aba escolhida para restaurar depois.
+    // Nao esperamos a gravacao porque ela nao precisa bloquear a UI.
     unawaited(
       DatabaseHelper.instance.setAppSetting(_lastTabSettingKey, '$index'),
     );
@@ -266,7 +335,12 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.black,
+
+      // Bloco 10 - IndexedStack mantem as telas vivas.
+      // Isso evita perder estado quando o usuario troca de aba.
       body: IndexedStack(index: _selectedIndex, children: _screens),
+
+      // Bloco 11 - barra de navegacao principal com cinco telas.
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _selectedIndex,
         onTap: _selectTab,

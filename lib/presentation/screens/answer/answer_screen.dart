@@ -22,11 +22,14 @@ class AnswerScreen extends StatefulWidget {
 }
 
 class _AnswerScreenState extends State<AnswerScreen> {
+  // Bloco 1 - servicos usados nesta tela.
+  // A tela combina sensor, GPS, notificacao e widgets externos.
   final AccelerometerService _accelerometerService = AccelerometerService();
   final GpsService _gpsService = GpsService();
   final StudyPlaceService _studyPlaceService = StudyPlaceService();
   final NotificationService _notificationService = NotificationService();
 
+  // Bloco 2 - estado local do tempo de resposta e do modo foco.
   Timer? _timer;
   int _elapsedSeconds = 0;
   bool _focusModeActive = false;
@@ -34,18 +37,22 @@ class _AnswerScreenState extends State<AnswerScreen> {
   @override
   void initState() {
     super.initState();
+    // Bloco 3 - ao abrir a tela, inicia cronometro e acelerometro.
     _startTimer();
     _startFocusSensor();
   }
 
   @override
   void dispose() {
+    // Bloco 4 - ao sair, cancela timer e libera sensor.
     _timer?.cancel();
     _accelerometerService.dispose();
     super.dispose();
   }
 
+  // Bloco 5 - cronometro da questao.
   void _startTimer() {
+    // Bloco 5.1 - incrementa a cada segundo enquanto nao esta em modo foco.
     _timer = Timer.periodic(const Duration(seconds: 1), (_) {
       if (!mounted || _focusModeActive) return;
       setState(() {
@@ -54,8 +61,10 @@ class _AnswerScreenState extends State<AnswerScreen> {
     });
   }
 
+  // Bloco 6 - inicia sensor do modo foco.
   Future<void> _startFocusSensor() async {
     try {
+      // Bloco 6.1 - quando o celular vira para baixo, ativa overlay e pausa tempo.
       await _accelerometerService.startListening(
         onChanged: (isFocusMode) {
           if (!mounted) return;
@@ -72,8 +81,11 @@ class _AnswerScreenState extends State<AnswerScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // Bloco 7 - escuta o QuestionsProvider para redesenhar a tela.
+    // Alternativa selecionada, questao atual e progresso saem desse provider.
     return Consumer<QuestionsProvider>(
       builder: (context, provider, _) {
+        // Bloco 8 - questao que sera exibida agora.
         final question = provider.currentQuestion;
 
         return Scaffold(
@@ -81,8 +93,10 @@ class _AnswerScreenState extends State<AnswerScreen> {
           body: SafeArea(
             child: Stack(
               children: [
+                // Bloco 9 - conteudo principal: cabecalho, enunciado, alternativas e botao.
                 Column(
                   children: [
+                    // Bloco 10 - cabecalho com voltar, barra de progresso e cronometro.
                     Padding(
                       padding: const EdgeInsets.fromLTRB(8, 12, 18, 10),
                       child: Row(
@@ -120,12 +134,14 @@ class _AnswerScreenState extends State<AnswerScreen> {
                     ),
                     Expanded(
                       child: question == null
+                          // Bloco 11 - caso nenhum item tenha sido selecionado.
                           ? const Center(
                               child: Text(
                                 'Nenhuma questao selecionada.',
                                 style: TextStyle(color: Colors.white),
                               ),
                             )
+                          // Bloco 12 - area rolavel com enunciado e alternativas.
                           : SingleChildScrollView(
                               padding: const EdgeInsets.fromLTRB(
                                 18,
@@ -136,6 +152,7 @@ class _AnswerScreenState extends State<AnswerScreen> {
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
+                                  // Bloco 13 - mostra prova/origem e materia.
                                   Text(
                                     '${question.examSource ?? 'ENEM'} - ${question.subject}',
                                     style: const TextStyle(
@@ -144,6 +161,7 @@ class _AnswerScreenState extends State<AnswerScreen> {
                                     ),
                                   ),
                                   const SizedBox(height: 12),
+                                  // Bloco 14 - caixa do enunciado da questao.
                                   Container(
                                     width: double.infinity,
                                     padding: const EdgeInsets.all(20),
@@ -155,6 +173,7 @@ class _AnswerScreenState extends State<AnswerScreen> {
                                       ),
                                     ),
                                     child: MarkdownBody(
+                                      // Bloco 14.1 - limpa imagens para manter uso offline.
                                       data: _offlineMarkdown(question.text),
                                       selectable: true,
                                       styleSheet: _markdownStyle(
@@ -166,6 +185,7 @@ class _AnswerScreenState extends State<AnswerScreen> {
                                     ),
                                   ),
                                   const SizedBox(height: 18),
+                                  // Bloco 15 - lista das alternativas clicaveis.
                                   ListView(
                                     shrinkWrap: true,
                                     physics:
@@ -173,10 +193,12 @@ class _AnswerScreenState extends State<AnswerScreen> {
                                     children: question.options.entries.map((
                                       entry,
                                     ) {
+                                      // Bloco 15.1 - verifica se essa alternativa e a selecionada.
                                       final selected =
                                           provider.selectedOption == entry.key;
                                       return GestureDetector(
                                         onTap: () {
+                                          // Bloco 15.2 - grava alternativa escolhida no provider.
                                           provider.selectAlternative(entry.key);
                                         },
                                         child: Container(
@@ -237,6 +259,7 @@ class _AnswerScreenState extends State<AnswerScreen> {
                               ),
                             ),
                     ),
+                    // Bloco 16 - rodape fixo com botao de confirmar resposta.
                     Container(
                       padding: const EdgeInsets.fromLTRB(18, 12, 18, 18),
                       decoration: const BoxDecoration(
@@ -247,6 +270,7 @@ class _AnswerScreenState extends State<AnswerScreen> {
                       ),
                       child: ElevatedButton(
                         onPressed: provider.canConfirmAnswer
+                            // Bloco 16.1 - so confirma se existe alternativa selecionada.
                             ? () => _confirmAnswer(provider)
                             : null,
                         style: ElevatedButton.styleFrom(
@@ -267,6 +291,7 @@ class _AnswerScreenState extends State<AnswerScreen> {
                     ),
                   ],
                 ),
+                // Bloco 17 - overlay do Modo Foco ativado pelo acelerometro.
                 if (_focusModeActive)
                   Container(
                     color: Colors.black.withValues(alpha: 0.82),
@@ -301,19 +326,24 @@ class _AnswerScreenState extends State<AnswerScreen> {
   }
 
   Future<void> _confirmAnswer(QuestionsProvider provider) async {
+    // Bloco 18 - coleta dados necessarios para salvar a tentativa.
     final userId = context.read<UserProvider>().userId;
     final sessionProvider = context.read<SessionProvider>();
     final question = provider.currentQuestion;
     final selectedOption = provider.selectedOption;
+
+    // Bloco 19 - tenta registrar local de estudo junto com a resposta.
     final studyLocation = await _captureStudyLocation();
     final locationName = await _resolveStudyLocationName(studyLocation);
 
+    // Bloco 20 - detecta se a resposta pertence a um simulado ativo.
     final shouldAnswerActiveSimulado =
         sessionProvider.status == SessionStatus.inProgress &&
             sessionProvider.isCurrentQuestion(question) &&
             selectedOption != null;
 
     if (shouldAnswerActiveSimulado && question != null) {
+      // Bloco 21 - fluxo de resposta dentro de simulado.
       final isCorrect = await sessionProvider.answerCurrentQuestion(
         userId: userId,
         selectedOption: selectedOption,
@@ -324,11 +354,15 @@ class _AnswerScreenState extends State<AnswerScreen> {
         locationName: locationName,
       );
       if (sessionProvider.errorMessage != null) return;
+
+      // Bloco 22 - registra feedback no QuestionsProvider para a proxima tela.
       provider.registerAnsweredFeedback(
         question: question,
         selectedOption: selectedOption,
         isCorrect: isCorrect,
       );
+
+      // Bloco 23 - atualiza perfil, estatisticas, widgets e notificacao.
       await _refreshUserStats(userId);
       await _afterAttemptSaved(
         userId: userId,
@@ -341,6 +375,7 @@ class _AnswerScreenState extends State<AnswerScreen> {
       return;
     }
 
+    // Bloco 24 - fluxo de treino livre, fora de simulado.
     final feedback = await provider.confirmSelectedAnswer(
       userId: userId,
       timeTakenSeconds: _elapsedSeconds,
@@ -348,8 +383,12 @@ class _AnswerScreenState extends State<AnswerScreen> {
       longitude: studyLocation?.longitude,
       locationName: locationName,
     );
+
+    // Bloco 25 - atualiza estatisticas depois de salvar a tentativa.
     await _refreshUserStats(userId);
     if (!mounted || feedback == null) return;
+
+    // Bloco 26 - acoes pos-resposta: revisao se errou e home widgets.
     await _afterAttemptSaved(
       userId: userId,
       questionId: feedback.question.id,
@@ -360,6 +399,7 @@ class _AnswerScreenState extends State<AnswerScreen> {
     Navigator.of(context).pushNamed('/feedback');
   }
 
+  // Bloco 27 - captura GPS com timeout curto para nao travar a resposta.
   Future<StudyLocation?> _captureStudyLocation() async {
     try {
       return await _gpsService.getCurrentStudyLocation(
@@ -370,6 +410,7 @@ class _AnswerScreenState extends State<AnswerScreen> {
     }
   }
 
+  // Bloco 28 - transforma coordenadas em nome/local agrupado.
   Future<String?> _resolveStudyLocationName(StudyLocation? location) async {
     try {
       return await _studyPlaceService.resolvePlaceName(location);
@@ -378,12 +419,14 @@ class _AnswerScreenState extends State<AnswerScreen> {
     }
   }
 
+  // Bloco 29 - acoes feitas depois que a tentativa ja foi salva.
   Future<void> _afterAttemptSaved({
     required int userId,
     required int? questionId,
     required String questionTopic,
     required bool isCorrect,
   }) async {
+    // Bloco 29.1 - se errou, agenda notificacao de revisao.
     if (!isCorrect && questionId != null) {
       try {
         await _notificationService.scheduleWrongQuestionReview(
@@ -392,11 +435,13 @@ class _AnswerScreenState extends State<AnswerScreen> {
         );
       } catch (_) {}
     }
+    // Bloco 29.2 - atualiza widgets da tela inicial.
     try {
       await HomeWidgetService.refreshWidgets(userId: userId);
     } catch (_) {}
   }
 
+  // Bloco 30 - recarrega perfil e estatisticas em paralelo.
   Future<void> _refreshUserStats(int userId) async {
     await Future.wait([
       context.read<UserProvider>().refresh(userId: userId),
@@ -404,12 +449,14 @@ class _AnswerScreenState extends State<AnswerScreen> {
     ]);
   }
 
+  // Bloco 31 - transforma segundos em texto mm:ss.
   String get _formattedTime {
     final minutes = (_elapsedSeconds ~/ 60).toString().padLeft(2, '0');
     final seconds = (_elapsedSeconds % 60).toString().padLeft(2, '0');
     return '$minutes:$seconds';
   }
 
+  // Bloco 32 - remove imagens markdown porque o app usa questoes offline textuais.
   String _offlineMarkdown(String value) {
     return value.replaceAllMapped(
       RegExp(r'!\[[^\]]*\]\([^)]*\)'),
@@ -417,6 +464,7 @@ class _AnswerScreenState extends State<AnswerScreen> {
     );
   }
 
+  // Bloco 33 - padrao visual para textos em Markdown.
   MarkdownStyleSheet _markdownStyle(
     BuildContext context, {
     required double fontSize,

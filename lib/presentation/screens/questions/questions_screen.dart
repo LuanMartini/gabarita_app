@@ -4,6 +4,8 @@ import 'package:provider/provider.dart';
 import '../../../domain/entities/question.dart';
 import '../../providers/questions_provider.dart';
 
+// Bloco 1 - tela do banco de questoes.
+// Ela mostra busca, filtro por ENEM, ChoiceChips de disciplina e lista de cards.
 class QuestionsScreen extends StatefulWidget {
   const QuestionsScreen({super.key});
 
@@ -12,8 +14,12 @@ class QuestionsScreen extends StatefulWidget {
 }
 
 class _QuestionsScreenState extends State<QuestionsScreen> {
+  // Bloco 2 - controller do campo de busca.
+  // Precisa ser descartado no dispose para nao vazar memoria.
   final TextEditingController _searchController = TextEditingController();
 
+  // Bloco 3 - anos disponiveis no filtro de prova.
+  // O Provider transforma o ano escolhido em examSource, exemplo "ENEM 2023".
   static const List<int> _enemYears = [
     2025,
     2024,
@@ -34,6 +40,8 @@ class _QuestionsScreenState extends State<QuestionsScreen> {
     2009,
   ];
 
+  // Bloco 4 - filtros visuais por disciplina.
+  // "Todas" limpa o filtro de materia.
   final List<String> _filters = const [
     'Todas',
     'Matematica',
@@ -46,18 +54,24 @@ class _QuestionsScreenState extends State<QuestionsScreen> {
     'Biologia',
   ];
 
+  // Bloco 5 - estado local apenas para pintar o ChoiceChip selecionado.
+  // A lista real de questoes fica no QuestionsProvider.
   String _selectedFilter = 'Todas';
 
   @override
   void dispose() {
+    // Bloco 6 - libera o controller quando a tela sai da arvore.
     _searchController.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
+    // Bloco 7 - Consumer escuta o QuestionsProvider.
+    // Quando o provider chama notifyListeners, esta parte da tela redesenha.
     return Consumer<QuestionsProvider>(
       builder: (context, provider, _) {
+        // Bloco 8 - lista ja filtrada pelo provider.
         final questions = provider.questions;
 
         return Scaffold(
@@ -84,6 +98,9 @@ class _QuestionsScreenState extends State<QuestionsScreen> {
                     ],
                   ),
                   const SizedBox(height: 14),
+                  // Bloco 9 - busca textual.
+                  // A busca so dispara ao enviar o teclado para evitar recarregar
+                  // a lista a cada letra digitada.
                   TextField(
                     controller: _searchController,
                     style: const TextStyle(color: Colors.white),
@@ -104,6 +121,7 @@ class _QuestionsScreenState extends State<QuestionsScreen> {
                     onSubmitted: provider.setSearchText,
                   ),
                   const SizedBox(height: 14),
+                  // Bloco 10 - filtro por ano/prova do ENEM.
                   Container(
                     width: double.infinity,
                     padding: const EdgeInsets.symmetric(
@@ -131,6 +149,7 @@ class _QuestionsScreenState extends State<QuestionsScreen> {
                             ),
                           ),
                         ),
+                        // Bloco 11 - DropdownButton exigido para escolher ENEM especifico.
                         DropdownButton<int>(
                           value: provider.selectedExamYear ?? 0,
                           dropdownColor: const Color(0xFF0E131B),
@@ -152,6 +171,7 @@ class _QuestionsScreenState extends State<QuestionsScreen> {
                             ),
                           ],
                           onChanged: (value) {
+                            // Bloco 12 - valor 0 representa "Todos os ENEMs".
                             provider.setExamYearFilter(
                               value == null || value == 0 ? null : value,
                             );
@@ -161,6 +181,7 @@ class _QuestionsScreenState extends State<QuestionsScreen> {
                     ),
                   ),
                   const SizedBox(height: 14),
+                  // Bloco 13 - ChoiceChips das disciplinas.
                   Wrap(
                     spacing: 8,
                     runSpacing: 8,
@@ -182,15 +203,18 @@ class _QuestionsScreenState extends State<QuestionsScreen> {
                               : const Color(0xFF26364A),
                         ),
                         onSelected: (_) {
+                          // Bloco 14 - atualiza a cor do chip nesta tela.
                           setState(() {
                             _selectedFilter = filter;
                           });
+                          // Bloco 15 - pede ao provider para aplicar o filtro real.
                           provider.setSingleSubjectFilter(filter);
                         },
                       );
                     }).toList(),
                   ),
                   const SizedBox(height: 12),
+                  // Bloco 16 - switch para mostrar apenas favoritas.
                   Card(
                     child: SwitchListTile(
                       value: provider.favoritesOnly,
@@ -216,11 +240,13 @@ class _QuestionsScreenState extends State<QuestionsScreen> {
                         style: TextStyle(color: Color(0xFF9BAABD)),
                       ),
                       onChanged: (_) {
+                        // Bloco 17 - provider alterna o filtro e recarrega a lista.
                         provider.toggleFavoritesOnly();
                       },
                     ),
                   ),
                   const SizedBox(height: 12),
+                  // Bloco 18 - contador animado de questoes encontradas.
                   AnimatedSwitcher(
                     duration: const Duration(milliseconds: 220),
                     child: Text(
@@ -233,6 +259,7 @@ class _QuestionsScreenState extends State<QuestionsScreen> {
                       style: const TextStyle(color: Color(0xFF9BAABD)),
                     ),
                   ),
+                  // Bloco 19 - mensagem de erro amigavel, sem travar a tela.
                   if (provider.errorMessage != null) ...[
                     const SizedBox(height: 10),
                     Text(
@@ -241,6 +268,8 @@ class _QuestionsScreenState extends State<QuestionsScreen> {
                     ),
                   ],
                   const SizedBox(height: 18),
+                  // Bloco 20 - lista dentro do scroll principal.
+                  // Por isso usa shrinkWrap e NeverScrollableScrollPhysics.
                   ListView.builder(
                     shrinkWrap: true,
                     physics: const NeverScrollableScrollPhysics(),
@@ -251,6 +280,7 @@ class _QuestionsScreenState extends State<QuestionsScreen> {
                         question: question,
                         isFavoriteUpdating:
                             provider.isFavoriteUpdating(question.id),
+                        // Bloco 21 - favorito fica desabilitado enquanto salva.
                         onFavorite: () => provider.toggleFavorite(question),
                       );
                     },
@@ -265,6 +295,7 @@ class _QuestionsScreenState extends State<QuestionsScreen> {
   }
 }
 
+// Bloco 22 - card de uma questao na lista.
 class _QuestionCard extends StatelessWidget {
   const _QuestionCard({
     required this.question,
@@ -311,6 +342,9 @@ class _QuestionCard extends StatelessWidget {
               ),
             ),
             IconButton(
+              // Bloco 23 - botao de favorito.
+              // Se isFavoriteUpdating for true, onPressed vira null para impedir
+              // clique duplo e travamento.
               tooltip: 'Favoritar',
               onPressed: isFavoriteUpdating ? null : onFavorite,
               icon: Icon(
@@ -323,13 +357,16 @@ class _QuestionCard extends StatelessWidget {
           ],
         ),
         onTap: () {
+          // Bloco 24 - seleciona a questao no provider antes de abrir a tela.
           context.read<QuestionsProvider>().selectQuestion(question);
+          // Bloco 25 - navega para a tela de resposta.
           Navigator.of(context).pushNamed('/answer');
         },
       ),
     );
   }
 
+  // Bloco 26 - transforma dificuldade numerica em texto.
   String _difficultyLabel(int difficulty) {
     switch (difficulty) {
       case 1:
