@@ -34,6 +34,14 @@ class UserRepositoryImpl implements IUserRepository {
   }
 
   @override
+  Future<int> updateUserAvatar({required int userId, String? avatarPath}) {
+    return _dbHelper.updateUserAvatar(
+      userId: userId,
+      avatarPath: avatarPath,
+    );
+  }
+
+  @override
   Future<void> clearUserData(int userId) {
     return _dbHelper.clearUserData(userId);
   }

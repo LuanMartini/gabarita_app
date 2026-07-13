@@ -14,6 +14,26 @@ class QuestionsScreen extends StatefulWidget {
 class _QuestionsScreenState extends State<QuestionsScreen> {
   final TextEditingController _searchController = TextEditingController();
 
+  static const List<int> _enemYears = [
+    2025,
+    2024,
+    2023,
+    2022,
+    2021,
+    2020,
+    2019,
+    2018,
+    2017,
+    2016,
+    2015,
+    2014,
+    2013,
+    2012,
+    2011,
+    2010,
+    2009,
+  ];
+
   final List<String> _filters = const [
     'Todas',
     'Matematica',
@@ -43,190 +63,199 @@ class _QuestionsScreenState extends State<QuestionsScreen> {
         return Scaffold(
           backgroundColor: Colors.black,
           body: SafeArea(
-            child: RefreshIndicator(
-              color: const Color(0xFF4DA3FF),
-              backgroundColor: const Color(0xFF0E131B),
-              onRefresh: () => _refreshQuestions(provider),
-              child: SingleChildScrollView(
-                physics: const AlwaysScrollableScrollPhysics(),
-                padding: const EdgeInsets.fromLTRB(18, 18, 18, 92),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
+            child: SingleChildScrollView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              padding: const EdgeInsets.fromLTRB(18, 18, 18, 92),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          'Banco de questoes',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 27,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 14),
+                  TextField(
+                    controller: _searchController,
+                    style: const TextStyle(color: Colors.white),
+                    decoration: InputDecoration(
+                      hintText: 'Buscar por assunto, banca ou palavra-chave',
+                      hintStyle: const TextStyle(color: Color(0xFF6F7D90)),
+                      filled: true,
+                      fillColor: const Color(0xFF0E131B),
+                      prefixIcon: const Icon(
+                        Icons.search,
+                        color: Color(0xFF6F7D90),
+                      ),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        borderSide: BorderSide.none,
+                      ),
+                    ),
+                    onSubmitted: provider.setSearchText,
+                  ),
+                  const SizedBox(height: 14),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 4,
+                    ),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF0E131B),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: const Color(0xFF26364A)),
+                    ),
+                    child: Row(
                       children: [
+                        const Icon(
+                          Icons.event_note_outlined,
+                          color: Color(0xFF4DA3FF),
+                        ),
+                        const SizedBox(width: 10),
                         const Expanded(
                           child: Text(
-                            'Banco de questoes',
+                            'Prova',
                             style: TextStyle(
                               color: Colors.white,
-                              fontSize: 27,
                               fontWeight: FontWeight.w800,
                             ),
                           ),
                         ),
-                        PopupMenuButton<_QuestionMenuAction>(
-                          tooltip: 'Acoes',
-                          color: const Color(0xFF0E131B),
-                          iconColor: const Color(0xFF4DA3FF),
-                          onSelected: (action) =>
-                              _handleMenuAction(context, provider, action),
-                          itemBuilder: (context) {
-                            return const [
-                              PopupMenuItem(
-                                value: _QuestionMenuAction.importJson,
-                                child: Text('Carregar todos os JSONs ENEM'),
+                        DropdownButton<int>(
+                          value: provider.selectedExamYear ?? 0,
+                          dropdownColor: const Color(0xFF0E131B),
+                          underline: const SizedBox.shrink(),
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w700,
+                          ),
+                          items: [
+                            const DropdownMenuItem<int>(
+                              value: 0,
+                              child: Text('Todos os ENEMs'),
+                            ),
+                            ..._enemYears.map(
+                              (year) => DropdownMenuItem<int>(
+                                value: year,
+                                child: Text('ENEM $year'),
                               ),
-                              PopupMenuItem(
-                                value: _QuestionMenuAction.clearFilters,
-                                child: Text('Limpar filtros'),
-                              ),
-                              PopupMenuItem(
-                                value: _QuestionMenuAction.openScanner,
-                                child: Text('Abrir scanner'),
-                              ),
-                            ];
+                            ),
+                          ],
+                          onChanged: (value) {
+                            provider.setExamYearFilter(
+                              value == null || value == 0 ? null : value,
+                            );
                           },
                         ),
                       ],
                     ),
-                    const SizedBox(height: 14),
-                    SizedBox(
-                      width: double.infinity,
-                      child: FilledButton.icon(
-                        onPressed: () => Navigator.of(context).pushNamed(
-                          '/scanner',
+                  ),
+                  const SizedBox(height: 14),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: _filters.map((filter) {
+                      final selected = filter == _selectedFilter;
+                      return ChoiceChip(
+                        label: Text(filter),
+                        selected: selected,
+                        selectedColor: const Color(0xFF4DA3FF),
+                        backgroundColor: const Color(0xFF0E131B),
+                        labelStyle: TextStyle(
+                          color:
+                              selected ? Colors.white : const Color(0xFFB6C2D1),
+                          fontWeight: FontWeight.w700,
                         ),
-                        icon: const Icon(Icons.document_scanner_outlined),
-                        label: const Text('Escanear questao'),
-                        style: FilledButton.styleFrom(
-                          backgroundColor: const Color(0xFF4DA3FF),
-                          foregroundColor: Colors.white,
-                          minimumSize: const Size.fromHeight(46),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(8),
-                          ),
+                        side: BorderSide(
+                          color: selected
+                              ? const Color(0xFF4DA3FF)
+                              : const Color(0xFF26364A),
                         ),
-                      ),
-                    ),
-                    const SizedBox(height: 14),
-                    TextField(
-                      controller: _searchController,
-                      style: const TextStyle(color: Colors.white),
-                      decoration: InputDecoration(
-                        hintText: 'Buscar por assunto, banca ou palavra-chave',
-                        hintStyle: const TextStyle(color: Color(0xFF6F7D90)),
-                        filled: true,
-                        fillColor: const Color(0xFF0E131B),
-                        prefixIcon: const Icon(
-                          Icons.search,
-                          color: Color(0xFF6F7D90),
-                        ),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(8),
-                          borderSide: BorderSide.none,
-                        ),
-                      ),
-                      onSubmitted: provider.setSearchText,
-                    ),
-                    const SizedBox(height: 14),
-                    _EnemSyncCard(provider: provider),
-                    const SizedBox(height: 14),
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
-                      children: _filters.map((filter) {
-                        final selected = filter == _selectedFilter;
-                        return ChoiceChip(
-                          label: Text(filter),
-                          selected: selected,
-                          selectedColor: const Color(0xFF4DA3FF),
-                          backgroundColor: const Color(0xFF0E131B),
-                          labelStyle: TextStyle(
-                            color: selected
-                                ? Colors.white
-                                : const Color(0xFFB6C2D1),
-                            fontWeight: FontWeight.w700,
-                          ),
-                          side: BorderSide(
-                            color: selected
-                                ? const Color(0xFF4DA3FF)
-                                : const Color(0xFF26364A),
-                          ),
-                          onSelected: (_) {
-                            setState(() {
-                              _selectedFilter = filter;
-                            });
-                            provider.setSingleSubjectFilter(filter);
-                          },
-                        );
-                      }).toList(),
-                    ),
-                    const SizedBox(height: 12),
-                    Card(
-                      child: SwitchListTile(
-                        value: provider.favoritesOnly,
-                        activeThumbColor: const Color(0xFF4DA3FF),
-                        activeTrackColor: const Color(0xFF12395C),
-                        contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 14,
-                          vertical: 2,
-                        ),
-                        secondary: const Icon(
-                          Icons.favorite_border,
-                          color: Color(0xFF4DA3FF),
-                        ),
-                        title: const Text(
-                          'Somente favoritas',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.w800,
-                          ),
-                        ),
-                        subtitle: const Text(
-                          'Filtrar questoes marcadas para revisar depois',
-                          style: TextStyle(color: Color(0xFF9BAABD)),
-                        ),
-                        onChanged: (_) {
-                          provider.toggleFavoritesOnly();
+                        onSelected: (_) {
+                          setState(() {
+                            _selectedFilter = filter;
+                          });
+                          provider.setSingleSubjectFilter(filter);
                         },
+                      );
+                    }).toList(),
+                  ),
+                  const SizedBox(height: 12),
+                  Card(
+                    child: SwitchListTile(
+                      value: provider.favoritesOnly,
+                      activeThumbColor: const Color(0xFF4DA3FF),
+                      activeTrackColor: const Color(0xFF12395C),
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 14,
+                        vertical: 2,
                       ),
-                    ),
-                    const SizedBox(height: 12),
-                    AnimatedSwitcher(
-                      duration: const Duration(milliseconds: 220),
-                      child: Text(
-                        provider.isLoading
-                            ? 'Carregando questoes...'
-                            : '${questions.length} questoes encontradas',
-                        key: ValueKey(
-                          '${provider.isLoading}-${provider.favoritesOnly}-${questions.length}',
+                      secondary: const Icon(
+                        Icons.favorite_border,
+                        color: Color(0xFF4DA3FF),
+                      ),
+                      title: const Text(
+                        'Somente favoritas',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w800,
                         ),
-                        style: const TextStyle(color: Color(0xFF9BAABD)),
                       ),
-                    ),
-                    if (provider.errorMessage != null) ...[
-                      const SizedBox(height: 10),
-                      Text(
-                        provider.errorMessage!,
-                        style: const TextStyle(color: Color(0xFFEF4444)),
+                      subtitle: const Text(
+                        'Filtrar questoes marcadas para revisar depois',
+                        style: TextStyle(color: Color(0xFF9BAABD)),
                       ),
-                    ],
-                    const SizedBox(height: 18),
-                    ListView.builder(
-                      shrinkWrap: true,
-                      physics: const NeverScrollableScrollPhysics(),
-                      itemCount: questions.length,
-                      itemBuilder: (context, index) {
-                        final question = questions[index];
-                        return _QuestionCard(
-                          question: question,
-                          onFavorite: () => provider.toggleFavorite(question),
-                        );
+                      onChanged: (_) {
+                        provider.toggleFavoritesOnly();
                       },
                     ),
+                  ),
+                  const SizedBox(height: 12),
+                  AnimatedSwitcher(
+                    duration: const Duration(milliseconds: 220),
+                    child: Text(
+                      provider.selectedExamYear == null
+                          ? '${questions.length} questoes encontradas'
+                          : '${questions.length} questoes do ENEM ${provider.selectedExamYear}',
+                      key: ValueKey(
+                        '${provider.selectedExamYear}-${provider.favoritesOnly}-${questions.length}',
+                      ),
+                      style: const TextStyle(color: Color(0xFF9BAABD)),
+                    ),
+                  ),
+                  if (provider.errorMessage != null) ...[
+                    const SizedBox(height: 10),
+                    Text(
+                      provider.errorMessage!,
+                      style: const TextStyle(color: Color(0xFFEF4444)),
+                    ),
                   ],
-                ),
+                  const SizedBox(height: 18),
+                  ListView.builder(
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    itemCount: questions.length,
+                    itemBuilder: (context, index) {
+                      final question = questions[index];
+                      return _QuestionCard(
+                        question: question,
+                        isFavoriteUpdating:
+                            provider.isFavoriteUpdating(question.id),
+                        onFavorite: () => provider.toggleFavorite(question),
+                      );
+                    },
+                  ),
+                ],
               ),
             ),
           ),
@@ -234,115 +263,17 @@ class _QuestionsScreenState extends State<QuestionsScreen> {
       },
     );
   }
-
-  Future<void> _refreshQuestions(QuestionsProvider provider) async {
-    await provider.loadQuestions();
-  }
-
-  Future<void> _handleMenuAction(
-    BuildContext context,
-    QuestionsProvider provider,
-    _QuestionMenuAction action,
-  ) async {
-    switch (action) {
-      case _QuestionMenuAction.importJson:
-        await provider.initializeLocalEnemBank();
-        break;
-      case _QuestionMenuAction.clearFilters:
-        _searchController.clear();
-        setState(() {
-          _selectedFilter = 'Todas';
-        });
-        provider.clearFilters();
-        await provider.loadQuestions();
-        break;
-      case _QuestionMenuAction.openScanner:
-        if (!context.mounted) return;
-        Navigator.of(context).pushNamed('/scanner');
-        break;
-    }
-  }
-}
-
-enum _QuestionMenuAction {
-  importJson,
-  clearFilters,
-  openScanner,
-}
-
-class _EnemSyncCard extends StatelessWidget {
-  const _EnemSyncCard({required this.provider});
-
-  final QuestionsProvider provider;
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(14),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Banco local do ENEM',
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 16,
-                fontWeight: FontWeight.w800,
-              ),
-            ),
-            const SizedBox(height: 10),
-            const Text(
-              'Questoes textuais de todos os anos disponiveis (2009 a 2025), salvas no SQLite local.',
-              style: TextStyle(color: Color(0xFF9BAABD), height: 1.35),
-            ),
-            const SizedBox(height: 12),
-            ElevatedButton.icon(
-              onPressed: provider.isSyncingEnem
-                  ? null
-                  : () => provider.initializeLocalEnemBank(),
-              icon: provider.isSyncingEnem
-                  ? const SizedBox(
-                      width: 18,
-                      height: 18,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Icon(Icons.cloud_download_outlined),
-              label: Text(
-                provider.isSyncingEnem
-                    ? 'Preparando...'
-                    : 'Carregar todos os ENEMs offline',
-              ),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF4DA3FF),
-                foregroundColor: Colors.white,
-                minimumSize: const Size(double.infinity, 46),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),
-                ),
-              ),
-            ),
-            if (provider.syncMessage != null) ...[
-              const SizedBox(height: 10),
-              Text(
-                provider.syncMessage!,
-                style: const TextStyle(color: Color(0xFF9BAABD)),
-              ),
-            ],
-          ],
-        ),
-      ),
-    );
-  }
 }
 
 class _QuestionCard extends StatelessWidget {
   const _QuestionCard({
     required this.question,
+    required this.isFavoriteUpdating,
     required this.onFavorite,
   });
 
   final Question question;
+  final bool isFavoriteUpdating;
   final VoidCallback onFavorite;
 
   @override
@@ -381,7 +312,7 @@ class _QuestionCard extends StatelessWidget {
             ),
             IconButton(
               tooltip: 'Favoritar',
-              onPressed: onFavorite,
+              onPressed: isFavoriteUpdating ? null : onFavorite,
               icon: Icon(
                 question.isFavorite ? Icons.favorite : Icons.favorite_border,
                 color: question.isFavorite

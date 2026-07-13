@@ -8,7 +8,13 @@ class GetOrCreateUser {
 
   Future<User> call({
     String defaultName = 'Lucas Mendes',
+    int? userId,
   }) async {
+    if (userId != null) {
+      final existingUser = await _userRepository.getUser(userId);
+      if (existingUser != null) return existingUser;
+    }
+
     final existingUser = await _userRepository.getFirstUser();
     if (existingUser != null) return existingUser;
 

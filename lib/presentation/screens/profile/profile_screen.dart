@@ -1,3 +1,7 @@
+import 'dart:convert';
+import 'dart:io';
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -31,6 +35,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
         final user = userProvider.user;
         final name = user?.name ?? 'Lucas Mendes';
         final initials = _initials(name);
+        final avatarData = _avatarData(user?.avatar);
+        final avatarVersion = userProvider.avatarVersion;
         final weeklyPercent = (userProvider.weeklyGoalProgress * 100).round();
         final accuracyPercent = (userProvider.accuracyRate * 100).round();
 
@@ -43,18 +49,52 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
                   CircleAvatar(
+                    key: ValueKey(
+                      'profile-avatar-${avatarData?.fingerprint ?? initials}-$avatarVersion',
+                    ),
                     radius: 44,
                     backgroundColor: const Color(0xFF4DA3FF),
-                    child: Text(
-                      initials,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 28,
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
+                    child: avatarData == null
+                        ? Text(
+                            initials,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 28,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          )
+                        : ClipOval(
+                            child: Image.memory(
+                              avatarData.bytes,
+                              key: ValueKey(
+                                'profile-avatar-image-${avatarData.fingerprint}-$avatarVersion',
+                              ),
+                              width: 88,
+                              height: 88,
+                              fit: BoxFit.cover,
+                              gaplessPlayback: false,
+                            ),
+                          ),
                   ),
-                  const SizedBox(height: 14),
+                  const SizedBox(height: 8),
+                  TextButton.icon(
+                    onPressed: user == null
+                        ? null
+                        : () async {
+                            final profileProvider =
+                                context.read<UserProvider>();
+                            await Navigator.of(context).pushNamed(
+                              '/profile-photo',
+                            );
+                            if (!mounted) return;
+                            await profileProvider.refresh(
+                              userId: profileProvider.userId,
+                            );
+                          },
+                    icon: const Icon(Icons.camera_alt_outlined),
+                    label: const Text('Alterar foto'),
+                  ),
+                  const SizedBox(height: 6),
                   Text(
                     name,
                     style: const TextStyle(
@@ -65,9 +105,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   ),
                   const SizedBox(height: 8),
                   TextButton.icon(
-                    onPressed: user == null
-                        ? null
-                        : () => _showEditNameDialog(context, name),
+                    onPressed:
+                        user == null ? null : () => _showEditNameDialog(name),
                     icon: const Icon(Icons.edit_outlined),
                     label: const Text('Editar nome'),
                   ),
@@ -241,84 +280,157 @@ class _ProfileScreenState extends State<ProfileScreen> {
     return '$first$second'.toUpperCase();
   }
 
-  Future<void> _showEditNameDialog(BuildContext context, String currentName) {
-    final controller = TextEditingController(text: currentName);
-    final formKey = GlobalKey<FormState>();
-    final messenger = ScaffoldMessenger.of(context);
-    var isSaving = false;
+  _AvatarData? _avatarData(String? avatarPath) {
+    if (avatarPath == null || avatarPath.trim().isEmpty) return null;
 
-    return showDialog<void>(
+    final dataUri = _avatarDataFromDataUri(avatarPath);
+    if (dataUri != null) return dataUri;
+
+    final file = File(avatarPath);
+    if (!file.existsSync()) return null;
+
+    try {
+      final stat = file.statSync();
+      final bytes = file.readAsBytesSync();
+      if (bytes.isEmpty) return null;
+
+      return _AvatarData(
+        bytes: bytes,
+        fingerprint:
+            '$avatarPath-${stat.size}-${stat.modified.microsecondsSinceEpoch}',
+      );
+    } catch (_) {
+      return null;
+    }
+  }
+
+  _AvatarData? _avatarDataFromDataUri(String value) {
+    const marker = ';base64,';
+    final markerIndex = value.indexOf(marker);
+    if (!value.startsWith('data:image/') || markerIndex < 0) return null;
+
+    try {
+      final bytes = base64Decode(value.substring(markerIndex + marker.length));
+      if (bytes.isEmpty) return null;
+
+      return _AvatarData(
+        bytes: bytes,
+        fingerprint: 'inline-avatar-${bytes.length}-${value.hashCode}',
+      );
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<void> _showEditNameDialog(
+    String currentName,
+  ) async {
+    final newName = await showDialog<String>(
       context: context,
-      builder: (dialogContext) {
-        return StatefulBuilder(
-          builder: (context, setDialogState) {
-            return AlertDialog(
-              title: const Text('Editar nome'),
-              content: Form(
-                key: formKey,
-                child: TextFormField(
-                  controller: controller,
-                  autofocus: true,
-                  textCapitalization: TextCapitalization.words,
-                  maxLength: 30,
-                  decoration: const InputDecoration(labelText: 'Nome'),
-                  validator: (value) {
-                    final name = value?.trim() ?? '';
-                    if (name.isEmpty) return 'Informe seu nome.';
-                    if (name.length < 3 || name.length > 30) {
-                      return 'Use entre 3 e 30 caracteres.';
-                    }
-                    return null;
-                  },
-                ),
-              ),
-              actions: [
-                TextButton(
-                  onPressed: isSaving
-                      ? null
-                      : () => Navigator.of(dialogContext).pop(),
-                  child: const Text('Cancelar'),
-                ),
-                FilledButton(
-                  onPressed: isSaving
-                      ? null
-                      : () async {
-                          if (!formKey.currentState!.validate()) return;
-                          setDialogState(() => isSaving = true);
-                          try {
-                            await context
-                                .read<UserProvider>()
-                                .updateName(controller.text);
-                            if (!dialogContext.mounted) return;
-                            Navigator.of(dialogContext).pop();
-                            messenger.showSnackBar(
-                              const SnackBar(
-                                content: Text('Nome atualizado com sucesso.'),
-                              ),
-                            );
-                          } catch (_) {
-                            if (!dialogContext.mounted) return;
-                            messenger.showSnackBar(
-                              const SnackBar(
-                                content: Text('Nao foi possivel atualizar o nome.'),
-                              ),
-                            );
-                            setDialogState(() => isSaving = false);
-                          }
-                        },
-                  child: isSaving
-                      ? const SizedBox(
-                          width: 18,
-                          height: 18,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Text('Salvar'),
-                ),
-              ],
-            );
+      builder: (_) => _EditNameDialog(currentName: currentName),
+    );
+
+    if (!mounted || newName == null) return;
+
+    await Future<void>.delayed(const Duration(milliseconds: 250));
+    if (!mounted) return;
+
+    await _saveProfileName(newName);
+  }
+
+  Future<void> _saveProfileName(String newName) async {
+    try {
+      await context.read<UserProvider>().updateName(newName);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Nome atualizado com sucesso.'),
+        ),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Nao foi possivel atualizar o nome.'),
+        ),
+      );
+    }
+  }
+}
+
+class _AvatarData {
+  const _AvatarData({
+    required this.bytes,
+    required this.fingerprint,
+  });
+
+  final Uint8List bytes;
+  final String fingerprint;
+}
+
+class _EditNameDialog extends StatefulWidget {
+  const _EditNameDialog({required this.currentName});
+
+  final String currentName;
+
+  @override
+  State<_EditNameDialog> createState() => _EditNameDialogState();
+}
+
+class _EditNameDialogState extends State<_EditNameDialog> {
+  final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
+  late final TextEditingController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController(text: widget.currentName);
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Editar nome'),
+      content: Form(
+        key: _formKey,
+        child: TextFormField(
+          controller: _controller,
+          autofocus: true,
+          textCapitalization: TextCapitalization.words,
+          maxLength: 30,
+          decoration: const InputDecoration(labelText: 'Nome'),
+          validator: (value) {
+            final name = value?.trim() ?? '';
+            if (name.isEmpty) return 'Informe seu nome.';
+            if (name.length < 3 || name.length > 30) {
+              return 'Use entre 3 e 30 caracteres.';
+            }
+            return null;
           },
-        );
-      },
-    ).whenComplete(controller.dispose);
+          onFieldSubmitted: (_) => _submit(),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Cancelar'),
+        ),
+        FilledButton(
+          onPressed: _submit,
+          child: const Text('Salvar'),
+        ),
+      ],
+    );
+  }
+
+  void _submit() {
+    if (!_formKey.currentState!.validate()) return;
+    Navigator.of(context).pop(_controller.text.trim());
   }
 }

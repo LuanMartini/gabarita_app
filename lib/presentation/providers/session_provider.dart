@@ -85,6 +85,11 @@ class SessionProvider extends ChangeNotifier {
     return _sessionQuestions[_currentIndex];
   }
 
+  bool isCurrentQuestion(Question? question) {
+    final activeQuestion = currentQuestion;
+    return question?.id != null && activeQuestion?.id == question?.id;
+  }
+
   Future<void> initialize({int userId = 1}) {
     return loadRecentSimulados(userId: userId);
   }
@@ -154,6 +159,7 @@ class SessionProvider extends ChangeNotifier {
   Future<bool> answerCurrentQuestion({
     required int userId,
     required String selectedOption,
+    int? expectedQuestionId,
     int timeTakenSeconds = 0,
     double? latitude,
     double? longitude,
@@ -165,6 +171,12 @@ class SessionProvider extends ChangeNotifier {
 
     if (question == null || questionId == null || activeSessionId == null) {
       _errorMessage = 'Sessao invalida.';
+      notifyListeners();
+      return false;
+    }
+
+    if (expectedQuestionId != null && questionId != expectedQuestionId) {
+      _errorMessage = 'Questao do simulado fora de sincronia.';
       notifyListeners();
       return false;
     }

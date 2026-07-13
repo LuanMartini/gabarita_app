@@ -11,7 +11,6 @@ import 'data/repositories/question_repository_impl.dart';
 import 'data/repositories/study_progress_repository_impl.dart';
 import 'data/repositories/study_session_repository_impl.dart';
 import 'data/repositories/user_repository_impl.dart';
-import 'domain/usecases/add_question.dart';
 import 'domain/usecases/ensure_local_enem_bank.dart';
 import 'domain/usecases/generate_simulado.dart';
 import 'domain/usecases/get_or_create_user.dart';
@@ -24,6 +23,7 @@ import 'domain/usecases/get_wrong_questions.dart';
 import 'domain/usecases/save_attempt.dart';
 import 'domain/usecases/save_study_session.dart';
 import 'domain/usecases/set_weekly_goal.dart';
+import 'domain/usecases/update_user_avatar.dart';
 import 'domain/usecases/toggle_favorite_question.dart';
 import 'presentation/providers/questions_provider.dart';
 import 'presentation/providers/session_provider.dart';
@@ -34,10 +34,10 @@ import 'presentation/screens/daily_challenge/daily_challenge_launcher_screen.dar
 import 'presentation/screens/feedback/feedback_screen.dart';
 import 'presentation/screens/home/home_screen.dart';
 import 'presentation/screens/last_topic/last_topic_launcher_screen.dart';
+import 'presentation/screens/profile/profile_photo_screen.dart';
 import 'presentation/screens/profile/profile_screen.dart';
 import 'presentation/screens/questions/questions_screen.dart';
 import 'presentation/screens/review/review_screen.dart';
-import 'presentation/screens/scanner/scanner_screen.dart';
 import 'presentation/screens/simulado/simulado_config_screen.dart';
 import 'presentation/screens/splash/splash_screen.dart';
 import 'presentation/screens/statistics/statistics_screen.dart';
@@ -101,7 +101,7 @@ class _GabaritaAppState extends State<GabaritaApp> {
 
     switch (uri.host) {
       case 'scanner':
-        navigator.pushNamed('/scanner');
+        navigator.pushNamed('/profile-photo');
         break;
       case 'stats':
         navigator.pushNamed('/statistics');
@@ -142,6 +142,7 @@ class _GabaritaAppState extends State<GabaritaApp> {
             getUserStatistics: getUserStatistics,
             getStudyProgress: getStudyProgress,
             setWeeklyGoal: SetWeeklyGoal(studyProgressRepository),
+            updateUserAvatar: UpdateUserAvatar(userRepository),
             updateUserName: UpdateUserName(userRepository),
           )..loadUser(),
         ),
@@ -152,7 +153,6 @@ class _GabaritaAppState extends State<GabaritaApp> {
             getWrongQuestions: GetWrongQuestions(questionRepository),
             toggleFavoriteQuestion: ToggleFavoriteQuestion(questionRepository),
             saveAttempt: saveAttempt,
-            addQuestion: AddQuestion(questionRepository),
           )..initializeLocalEnemBank(),
         ),
         ChangeNotifierProvider<SessionProvider>(
@@ -205,8 +205,8 @@ class _GabaritaAppState extends State<GabaritaApp> {
           '/daily-challenge': (_) => const DailyChallengeLauncherScreen(),
           '/feedback': (_) => const FeedbackScreen(),
           '/last-topic': (_) => const LastTopicLauncherScreen(),
+          '/profile-photo': (_) => const ProfilePhotoScreen(),
           '/review': (_) => const ReviewScreen(),
-          '/scanner': (_) => const ScannerScreen(),
           '/statistics': (_) => const StatisticsScreen(),
         },
         home: const SplashScreen(),

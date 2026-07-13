@@ -25,7 +25,6 @@ class HomeWidgetService {
     'PerformanceWidgetProvider',
     'QuickStatsWidgetProvider',
     'LastTopicWidgetProvider',
-    'ScannerWidgetProvider',
   ];
 
   static Future<void> initialize({int userId = 1}) async {

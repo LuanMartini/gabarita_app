@@ -308,12 +308,16 @@ class _AnswerScreenState extends State<AnswerScreen> {
     final studyLocation = await _captureStudyLocation();
     final locationName = await _resolveStudyLocationName(studyLocation);
 
-    if (sessionProvider.status == SessionStatus.inProgress &&
-        question != null &&
-        selectedOption != null) {
+    final shouldAnswerActiveSimulado =
+        sessionProvider.status == SessionStatus.inProgress &&
+            sessionProvider.isCurrentQuestion(question) &&
+            selectedOption != null;
+
+    if (shouldAnswerActiveSimulado && question != null) {
       final isCorrect = await sessionProvider.answerCurrentQuestion(
         userId: userId,
         selectedOption: selectedOption,
+        expectedQuestionId: question.id,
         timeTakenSeconds: _elapsedSeconds,
         latitude: studyLocation?.latitude,
         longitude: studyLocation?.longitude,

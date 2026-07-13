@@ -1,9 +1,10 @@
+import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:image_picker/image_picker.dart';
 
-class ScannedQuestionImage {
-  const ScannedQuestionImage({
+class CapturedProfilePhoto {
+  const CapturedProfilePhoto({
     required this.path,
     required this.name,
     required this.bytes,
@@ -14,6 +15,12 @@ class ScannedQuestionImage {
   final String name;
   final Uint8List bytes;
   final String? mimeType;
+
+  String get dataUri {
+    final type =
+        mimeType == null || mimeType!.trim().isEmpty ? 'image/jpeg' : mimeType!;
+    return 'data:$type;base64,${base64Encode(bytes)}';
+  }
 
   Map<String, dynamic> toMap() {
     return {
@@ -30,10 +37,10 @@ class CameraService {
 
   final ImagePicker _picker;
 
-  Future<ScannedQuestionImage?> scanQuestion({
-    double maxWidth = 1600,
-    double maxHeight = 1600,
-    int imageQuality = 85,
+  Future<CapturedProfilePhoto?> captureProfilePhoto({
+    double maxWidth = 360,
+    double maxHeight = 360,
+    int imageQuality = 70,
   }) async {
     final image = await _picker.pickImage(
       source: ImageSource.camera,
@@ -43,11 +50,12 @@ class CameraService {
     );
 
     if (image == null) return null;
+    final bytes = await image.readAsBytes();
 
-    return ScannedQuestionImage(
+    return CapturedProfilePhoto(
       path: image.path,
       name: image.name,
-      bytes: await image.readAsBytes(),
+      bytes: bytes,
       mimeType: image.mimeType,
     );
   }

@@ -2,7 +2,6 @@ import 'package:flutter/foundation.dart';
 
 import '../../domain/entities/attempt.dart';
 import '../../domain/entities/question.dart';
-import '../../domain/usecases/add_question.dart';
 import '../../domain/usecases/ensure_local_enem_bank.dart';
 import '../../domain/usecases/get_questions_by_filter.dart';
 import '../../domain/usecases/get_wrong_questions.dart';
@@ -40,23 +39,22 @@ class QuestionsProvider extends ChangeNotifier {
     required GetWrongQuestions getWrongQuestions,
     required ToggleFavoriteQuestion toggleFavoriteQuestion,
     required SaveAttempt saveAttempt,
-    required AddQuestion addQuestion,
   })  : _ensureLocalEnemBank = ensureLocalEnemBank,
         _getQuestionsByFilter = getQuestionsByFilter,
         _getWrongQuestions = getWrongQuestions,
         _toggleFavoriteQuestion = toggleFavoriteQuestion,
-        _saveAttempt = saveAttempt,
-        _addQuestion = addQuestion;
+        _saveAttempt = saveAttempt;
 
   final EnsureLocalEnemBank _ensureLocalEnemBank;
   final GetQuestionsByFilter _getQuestionsByFilter;
   final GetWrongQuestions _getWrongQuestions;
   final ToggleFavoriteQuestion _toggleFavoriteQuestion;
   final SaveAttempt _saveAttempt;
-  final AddQuestion _addQuestion;
 
   final Set<String> _selectedSubjects = <String>{};
   final Set<int> _selectedDifficulties = <int>{};
+  final Set<int> _favoriteUpdatesInFlight = <int>{};
+  static const int _defaultQuestionLimit = 120;
 
   List<Question> _questions = <Question>[];
   List<Question> _wrongQuestions = <Question>[];
@@ -70,11 +68,13 @@ class QuestionsProvider extends ChangeNotifier {
   bool _isSyncingEnem = false;
   bool _isSavingAnswer = false;
   int _currentIndex = 0;
+  int? _selectedExamYear;
   String _searchText = '';
   String? _errorMessage;
   String? _syncMessage;
   bool _localBankReady = false;
   Future<void>? _localBankInitialization;
+  Future<void>? _questionsLoadOperation;
 
   List<Question> get questions => List.unmodifiable(_questions);
   List<Question> get wrongQuestions => List.unmodifiable(_wrongQuestions);
@@ -90,11 +90,17 @@ class QuestionsProvider extends ChangeNotifier {
   bool get isLoading => _isLoading;
   bool get isSyncingEnem => _isSyncingEnem;
   bool get isSavingAnswer => _isSavingAnswer;
+  bool get isBusy => _isLoading || _isSyncingEnem;
   int get currentIndex => _currentIndex;
+  int? get selectedExamYear => _selectedExamYear;
   String get searchText => _searchText;
   String? get errorMessage => _errorMessage;
   String? get syncMessage => _syncMessage;
   bool get localBankReady => _localBankReady;
+
+  bool isFavoriteUpdating(int? questionId) {
+    return questionId != null && _favoriteUpdatesInFlight.contains(questionId);
+  }
 
   Question? get currentQuestion {
     if (_questions.isEmpty) return null;
@@ -117,7 +123,17 @@ class QuestionsProvider extends ChangeNotifier {
     return _answerStatus == QuestionAnswerStatus.answered;
   }
 
-  Future<void> loadQuestions({int? limit}) async {
+  Future<void> loadQuestions({int? limit}) {
+    if (_isSyncingEnem) return Future<void>.value();
+    if (_questionsLoadOperation != null) return _questionsLoadOperation!;
+
+    _questionsLoadOperation = _loadQuestions(limit: limit).whenComplete(() {
+      _questionsLoadOperation = null;
+    });
+    return _questionsLoadOperation!;
+  }
+
+  Future<void> _loadQuestions({int? limit}) async {
     _setLoading(true);
     _errorMessage = null;
 
@@ -128,8 +144,10 @@ class QuestionsProvider extends ChangeNotifier {
             ? null
             : _selectedDifficulties.toList(),
         favoritesOnly: _favoritesOnly,
+        examSource:
+            _selectedExamYear == null ? null : 'ENEM $_selectedExamYear',
         searchText: _searchText.isEmpty ? null : _searchText,
-        limit: limit,
+        limit: limit ?? _defaultQuestionLimit,
       );
       if (_currentIndex >= _questions.length) _currentIndex = 0;
       _clearAnswerState();
@@ -175,25 +193,6 @@ class QuestionsProvider extends ChangeNotifier {
     } finally {
       _isLoading = false;
       _isSyncingEnem = false;
-      notifyListeners();
-    }
-  }
-
-  Future<int?> addLocalQuestion(Question question) async {
-    _isLoading = true;
-    _errorMessage = null;
-    notifyListeners();
-
-    try {
-      final questionId = await _addQuestion(question);
-      await loadQuestions();
-      return questionId;
-    } catch (_) {
-      _errorMessage = 'Nao foi possivel salvar a questao escaneada.';
-      notifyListeners();
-      return null;
-    } finally {
-      _isLoading = false;
       notifyListeners();
     }
   }
@@ -322,13 +321,16 @@ class QuestionsProvider extends ChangeNotifier {
     required bool isCorrect,
   }) {
     _selectedOption = Question.normalizeOption(selectedOption);
+    final actualIsCorrect = question.isCorrectAnswer(_selectedOption!);
+    final feedbackIsCorrect =
+        isCorrect == actualIsCorrect ? isCorrect : actualIsCorrect;
     _lastFeedback = AnswerFeedback(
       question: question,
       selectedOption: _selectedOption!,
       correctOption: question.normalizedCorrectOption,
-      isCorrect: isCorrect,
+      isCorrect: feedbackIsCorrect,
       explanation: question.feedback,
-      xpEarned: isCorrect ? 15 : 0,
+      xpEarned: feedbackIsCorrect ? 15 : 0,
     );
     _answerStatus = QuestionAnswerStatus.answered;
     notifyListeners();
@@ -353,6 +355,12 @@ class QuestionsProvider extends ChangeNotifier {
     if (subject != null && subject.isNotEmpty && subject != 'Todas') {
       _selectedSubjects.add(subject);
     }
+    notifyListeners();
+    await loadQuestions();
+  }
+
+  Future<void> setExamYearFilter(int? year) async {
+    _selectedExamYear = year;
     notifyListeners();
     await loadQuestions();
   }
@@ -386,23 +394,91 @@ class QuestionsProvider extends ChangeNotifier {
   Future<void> toggleFavorite(Question question) async {
     final questionId = question.id;
     if (questionId == null) return;
+    if (_favoriteUpdatesInFlight.contains(questionId)) return;
+
+    final nextValue = !question.isFavorite;
+    final previousQuestions = List<Question>.from(_questions);
+    final previousWrongQuestions = List<Question>.from(_wrongQuestions);
+    final previousFavoriteQuestions = List<Question>.from(_favoriteQuestions);
+    final previousRecommendedQuestions =
+        List<Question>.from(_recommendedQuestions);
+    final previousCurrentIndex = _currentIndex;
+
+    _favoriteUpdatesInFlight.add(questionId);
+    _applyFavoriteState(questionId: questionId, isFavorite: nextValue);
+    _errorMessage = null;
+    notifyListeners();
 
     try {
-      final nextValue = !question.isFavorite;
-      await _toggleFavoriteQuestion(
+      final updatedRows = await _toggleFavoriteQuestion(
         questionId: questionId,
         isFavorite: nextValue,
       );
-      await loadQuestions();
+      if (updatedRows == 0) {
+        throw StateError('Questao nao encontrada.');
+      }
     } catch (_) {
+      _questions = previousQuestions;
+      _wrongQuestions = previousWrongQuestions;
+      _favoriteQuestions = previousFavoriteQuestions;
+      _recommendedQuestions = previousRecommendedQuestions;
+      _currentIndex = previousCurrentIndex;
       _errorMessage = 'Nao foi possivel atualizar o favorito.';
+    } finally {
+      _favoriteUpdatesInFlight.remove(questionId);
       notifyListeners();
+    }
+  }
+
+  void _applyFavoriteState({
+    required int questionId,
+    required bool isFavorite,
+  }) {
+    List<Question> updateList(List<Question> source) {
+      final updated = <Question>[];
+      for (final item in source) {
+        if (item.id != questionId) {
+          updated.add(item);
+          continue;
+        }
+
+        if (_favoritesOnly && !isFavorite) {
+          continue;
+        }
+
+        updated.add(item.copyWith(isFavorite: isFavorite));
+      }
+      return updated;
+    }
+
+    _questions = updateList(_questions);
+    _wrongQuestions = updateList(_wrongQuestions);
+    _recommendedQuestions = updateList(_recommendedQuestions);
+
+    if (isFavorite) {
+      final existingIndex = _favoriteQuestions.indexWhere(
+        (item) => item.id == questionId,
+      );
+      if (existingIndex >= 0) {
+        _favoriteQuestions = List<Question>.from(_favoriteQuestions)
+          ..[existingIndex] =
+              _favoriteQuestions[existingIndex].copyWith(isFavorite: true);
+      }
+    } else {
+      _favoriteQuestions = _favoriteQuestions
+          .where((item) => item.id != questionId)
+          .toList(growable: false);
+    }
+
+    if (_currentIndex >= _questions.length) {
+      _currentIndex = _questions.isEmpty ? 0 : _questions.length - 1;
     }
   }
 
   void clearFilters() {
     _selectedSubjects.clear();
     _selectedDifficulties.clear();
+    _selectedExamYear = null;
     _favoritesOnly = false;
     _searchText = '';
     notifyListeners();
@@ -420,6 +496,7 @@ class QuestionsProvider extends ChangeNotifier {
   }
 
   void _setLoading(bool value) {
+    if (_isLoading == value) return;
     _isLoading = value;
     notifyListeners();
   }

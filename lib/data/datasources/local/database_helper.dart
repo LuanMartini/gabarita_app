@@ -526,7 +526,8 @@ class DatabaseHelper {
     );
   }
 
-  Future<int> updateUserName({required int userId, required String name}) async {
+  Future<int> updateUserName(
+      {required int userId, required String name}) async {
     final db = await database;
     return db.update(
       DbConstants.tableUsers,
@@ -539,6 +540,19 @@ class DatabaseHelper {
   // ══════════════════════════════════════════════════════════
   //  CRUD · QUESTIONS
   // ══════════════════════════════════════════════════════════
+
+  Future<int> updateUserAvatar({
+    required int userId,
+    String? avatarPath,
+  }) async {
+    final db = await database;
+    return db.update(
+      DbConstants.tableUsers,
+      {DbConstants.colUserAvatar: avatarPath},
+      where: '${DbConstants.colUserId} = ?',
+      whereArgs: [userId],
+    );
+  }
 
   Future<int> insertQuestion(Question question) async {
     if (!_isUsableQuestion(question)) {
@@ -651,16 +665,123 @@ class DatabaseHelper {
     final whereString =
         whereClauses.isNotEmpty ? whereClauses.join(' AND ') : null;
 
+    if (limit != null && limit > 0 && examSource == null) {
+      return _getBalancedFilteredQuestions(
+        db,
+        whereClauses: whereClauses,
+        whereArgs: whereArgs,
+        limit: limit,
+      );
+    }
+
     final maps = await db.query(
       DbConstants.tableQuestions,
       where: whereString,
       whereArgs: whereArgs.isNotEmpty ? whereArgs : null,
       orderBy:
-          '${DbConstants.colQuestionCreatedAt} DESC, ${DbConstants.colQuestionId} DESC',
+          '${DbConstants.colQuestionYear} DESC, ${DbConstants.colQuestionId} ASC',
       limit: limit,
     );
 
     return maps.map(QuestionModel.fromMap).toList();
+  }
+
+  Future<List<QuestionModel>> _getBalancedFilteredQuestions(
+    Database db, {
+    required List<String> whereClauses,
+    required List<dynamic> whereArgs,
+    required int limit,
+  }) async {
+    final distinctWhereClauses = <String>[
+      ...whereClauses,
+      '${DbConstants.colQuestionYear} IS NOT NULL',
+    ];
+    final distinctRows = await db.query(
+      DbConstants.tableQuestions,
+      columns: [DbConstants.colQuestionYear],
+      where: distinctWhereClauses.join(' AND '),
+      whereArgs: whereArgs.isNotEmpty ? whereArgs : null,
+      groupBy: DbConstants.colQuestionYear,
+      orderBy: '${DbConstants.colQuestionYear} DESC',
+    );
+
+    final years = distinctRows
+        .map((row) => _asInt(row[DbConstants.colQuestionYear]))
+        .whereType<int>()
+        .toList(growable: false);
+
+    if (years.isEmpty) {
+      final maps = await db.query(
+        DbConstants.tableQuestions,
+        where: whereClauses.isNotEmpty ? whereClauses.join(' AND ') : null,
+        whereArgs: whereArgs.isNotEmpty ? whereArgs : null,
+        orderBy:
+            '${DbConstants.colQuestionYear} DESC, ${DbConstants.colQuestionId} ASC',
+        limit: limit,
+      );
+      return maps.map(QuestionModel.fromMap).toList();
+    }
+
+    final perYear = math.max(1, (limit / years.length).ceil());
+    final questionsByYear = <int, List<QuestionModel>>{};
+
+    for (final year in years) {
+      final yearWhereClauses = <String>[
+        ...whereClauses,
+        '${DbConstants.colQuestionYear} = ?',
+      ];
+      final yearRows = await db.query(
+        DbConstants.tableQuestions,
+        where: yearWhereClauses.join(' AND '),
+        whereArgs: <dynamic>[...whereArgs, year],
+        orderBy: '${DbConstants.colQuestionId} ASC',
+        limit: perYear,
+      );
+      questionsByYear[year] = yearRows.map(QuestionModel.fromMap).toList();
+    }
+
+    final selected = <QuestionModel>[];
+    var addedInRound = true;
+    while (selected.length < limit && addedInRound) {
+      addedInRound = false;
+      for (final year in years) {
+        final yearQuestions = questionsByYear[year];
+        if (yearQuestions == null || yearQuestions.isEmpty) continue;
+
+        selected.add(yearQuestions.removeAt(0));
+        addedInRound = true;
+        if (selected.length == limit) break;
+      }
+    }
+
+    if (selected.length < limit) {
+      final selectedIds = selected
+          .map((question) => question.id)
+          .whereType<int>()
+          .toList(growable: false);
+      final topUpWhereClauses = <String>[...whereClauses];
+      final topUpArgs = <dynamic>[...whereArgs];
+      if (selectedIds.isNotEmpty) {
+        topUpWhereClauses.add(
+          '${DbConstants.colQuestionId} NOT IN (${List.filled(selectedIds.length, '?').join(',')})',
+        );
+        topUpArgs.addAll(selectedIds);
+      }
+
+      final topUpRows = await db.query(
+        DbConstants.tableQuestions,
+        where: topUpWhereClauses.isNotEmpty
+            ? topUpWhereClauses.join(' AND ')
+            : null,
+        whereArgs: topUpArgs.isNotEmpty ? topUpArgs : null,
+        orderBy:
+            '${DbConstants.colQuestionYear} DESC, ${DbConstants.colQuestionId} ASC',
+        limit: limit - selected.length,
+      );
+      selected.addAll(topUpRows.map(QuestionModel.fromMap));
+    }
+
+    return selected.take(limit).toList(growable: false);
   }
 
   Future<List<QuestionModel>> getBalancedSimuladoQuestions({

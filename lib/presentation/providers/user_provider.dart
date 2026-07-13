@@ -6,6 +6,7 @@ import '../../domain/usecases/get_or_create_user.dart';
 import '../../domain/usecases/get_study_progress.dart';
 import '../../domain/usecases/get_user_statistics.dart';
 import '../../domain/usecases/set_weekly_goal.dart';
+import '../../domain/usecases/update_user_avatar.dart';
 import '../../domain/usecases/update_user_name.dart';
 
 class UserProvider extends ChangeNotifier {
@@ -14,29 +15,34 @@ class UserProvider extends ChangeNotifier {
     required GetUserStatistics getUserStatistics,
     required GetStudyProgress getStudyProgress,
     required SetWeeklyGoal setWeeklyGoal,
+    required UpdateUserAvatar updateUserAvatar,
     required UpdateUserName updateUserName,
   })  : _getOrCreateUser = getOrCreateUser,
         _getUserStatistics = getUserStatistics,
         _getStudyProgress = getStudyProgress,
         _setWeeklyGoal = setWeeklyGoal,
+        _updateUserAvatar = updateUserAvatar,
         _updateUserName = updateUserName;
 
   final GetOrCreateUser _getOrCreateUser;
   final GetUserStatistics _getUserStatistics;
   final GetStudyProgress _getStudyProgress;
   final SetWeeklyGoal _setWeeklyGoal;
+  final UpdateUserAvatar _updateUserAvatar;
   final UpdateUserName _updateUserName;
 
   User? _user;
   UserStatistics? _statistics;
   StudyProgress? _progress;
   bool _isLoading = false;
+  int _avatarVersion = 0;
   String? _errorMessage;
 
   User? get user => _user;
   UserStatistics? get statistics => _statistics;
   StudyProgress? get progress => _progress;
   bool get isLoading => _isLoading;
+  int get avatarVersion => _avatarVersion;
   String? get errorMessage => _errorMessage;
 
   int get userId => _user?.id ?? 1;
@@ -56,7 +62,12 @@ class UserProvider extends ChangeNotifier {
     _errorMessage = null;
 
     try {
-      _user = await _getOrCreateUser();
+      final previousAvatar = _user?.avatar;
+      final preferredUserId = userId ?? _user?.id;
+      _user = await _getOrCreateUser(userId: preferredUserId);
+      if (previousAvatar != _user?.avatar) {
+        _avatarVersion++;
+      }
       final resolvedUserId = userId ?? _user?.id;
       if (resolvedUserId != null) {
         _statistics = await _getUserStatistics(resolvedUserId);
@@ -91,6 +102,34 @@ class UserProvider extends ChangeNotifier {
 
     final updatedName = await _updateUserName(userId: user!.id!, name: name);
     _user = user.copyWith(name: updatedName);
+    _errorMessage = null;
+    notifyListeners();
+  }
+
+  Future<void> updateAvatar(String avatarPath) async {
+    final user = _user;
+    if (user?.id == null) {
+      throw StateError('Perfil local nao encontrado.');
+    }
+
+    final updatedUser = await _updateUserAvatar(
+      userId: user!.id!,
+      avatarPath: avatarPath,
+    );
+    _user = updatedUser;
+    _avatarVersion++;
+    _errorMessage = null;
+    notifyListeners();
+  }
+
+  Future<void> clearAvatar() async {
+    final user = _user;
+    if (user?.id == null) {
+      throw StateError('Perfil local nao encontrado.');
+    }
+
+    _user = await _updateUserAvatar(userId: user!.id!, avatarPath: null);
+    _avatarVersion++;
     _errorMessage = null;
     notifyListeners();
   }
