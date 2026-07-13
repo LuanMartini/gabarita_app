@@ -14,6 +14,14 @@ import '../../../services/hardware/study_place_service.dart';
 import '../../../services/notifications/notification_service.dart';
 import '../../../services/widgets/home_widget_service.dart';
 
+// Tela: AnswerScreen.
+// Objetivo: mostrar uma questao, permitir escolher alternativa e confirmar.
+// Tambem integra recursos extras:
+// - acelerometro para Modo Foco;
+// - cronometro local;
+// - GPS para registrar local de estudo;
+// - notificacao de revisao quando o aluno erra;
+// - atualizacao de estatisticas e widgets.
 class AnswerScreen extends StatefulWidget {
   const AnswerScreen({super.key});
 
@@ -29,7 +37,7 @@ class _AnswerScreenState extends State<AnswerScreen> {
   final StudyPlaceService _studyPlaceService = StudyPlaceService();
   final NotificationService _notificationService = NotificationService();
 
-  // Bloco 2 - estado local do tempo de resposta e do modo foco.
+  // Bloco 2 - estado local do tempo de resposta
   Timer? _timer;
   int _elapsedSeconds = 0;
   bool _focusModeActive = false;
@@ -91,6 +99,9 @@ class _AnswerScreenState extends State<AnswerScreen> {
         return Scaffold(
           backgroundColor: Colors.black,
           body: SafeArea(
+            // Widget especial: Stack.
+            // Permite colocar widgets uns por cima dos outros. Aqui o conteudo
+            // principal fica embaixo e o overlay de "Modo Foco" aparece por cima.
             child: Stack(
               children: [
                 // Bloco 9 - conteudo principal: cabecalho, enunciado, alternativas e botao.
@@ -101,6 +112,9 @@ class _AnswerScreenState extends State<AnswerScreen> {
                       padding: const EdgeInsets.fromLTRB(8, 12, 18, 10),
                       child: Row(
                         children: [
+                          // Widget especial: IconButton.
+                          // Botao compacto que usa apenas um icone. Aqui volta
+                          // para a tela anterior.
                           IconButton(
                             onPressed: () => Navigator.of(context).pop(),
                             icon: const Icon(
@@ -109,6 +123,9 @@ class _AnswerScreenState extends State<AnswerScreen> {
                             ),
                           ),
                           Expanded(
+                            // Widget especial: LinearProgressIndicator.
+                            // Mostra quanto da lista/sessao de questoes ja foi
+                            // percorrido pelo aluno.
                             child: LinearProgressIndicator(
                               value: provider.progress,
                               minHeight: 8,
@@ -172,6 +189,9 @@ class _AnswerScreenState extends State<AnswerScreen> {
                                         color: const Color(0xFF243449),
                                       ),
                                     ),
+                                    // Widget especial: MarkdownBody.
+                                    // Renderiza texto com Markdown, permitindo
+                                    // negrito, listas, codigo e formulas textuais.
                                     child: MarkdownBody(
                                       // Bloco 14.1 - limpa imagens para manter uso offline.
                                       data: _offlineMarkdown(question.text),
@@ -196,6 +216,9 @@ class _AnswerScreenState extends State<AnswerScreen> {
                                       // Bloco 15.1 - verifica se essa alternativa e a selecionada.
                                       final selected =
                                           provider.selectedOption == entry.key;
+                                      // Widget especial: GestureDetector.
+                                      // Transforma o Container inteiro da alternativa
+                                      // em area clicavel, nao apenas o texto.
                                       return GestureDetector(
                                         onTap: () {
                                           // Bloco 15.2 - grava alternativa escolhida no provider.
@@ -221,6 +244,9 @@ class _AnswerScreenState extends State<AnswerScreen> {
                                           ),
                                           child: Row(
                                             children: [
+                                              // Widget especial: CircleAvatar.
+                                              // Aqui vira um circulo com a letra
+                                              // da alternativa: A, B, C, D ou E.
                                               CircleAvatar(
                                                 radius: 18,
                                                 backgroundColor: selected
@@ -236,6 +262,9 @@ class _AnswerScreenState extends State<AnswerScreen> {
                                               ),
                                               const SizedBox(width: 14),
                                               Expanded(
+                                                // Widget especial: MarkdownBody.
+                                                // Tambem permite renderizar as
+                                                // alternativas com texto rico.
                                                 child: MarkdownBody(
                                                   data: entry.value.isEmpty
                                                       ? 'Alternativa sem texto'
@@ -293,6 +322,9 @@ class _AnswerScreenState extends State<AnswerScreen> {
                 ),
                 // Bloco 17 - overlay do Modo Foco ativado pelo acelerometro.
                 if (_focusModeActive)
+                  // Widget especial: Container sobreposto pelo Stack.
+                  // Como fica depois da Column na lista do Stack, aparece por cima
+                  // da questao e bloqueia a interacao enquanto o modo foco esta ativo.
                   Container(
                     color: Colors.black.withValues(alpha: 0.82),
                     child: Center(

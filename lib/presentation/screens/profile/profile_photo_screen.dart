@@ -8,6 +8,10 @@ import 'package:provider/provider.dart';
 import '../../../services/hardware/camera_service.dart';
 import '../../providers/user_provider.dart';
 
+// Tela: ProfilePhotoScreen.
+// Objetivo: permitir que o aluno tire uma foto nova, visualize o preview
+// circular e remova a foto atual.
+// A foto nova e salva como data URI base64 no banco local, evitando cache antigo.
 class ProfilePhotoScreen extends StatefulWidget {
   const ProfilePhotoScreen({super.key});
 
@@ -50,6 +54,9 @@ class _ProfilePhotoScreenState extends State<ProfilePhotoScreen> {
             title: const Text('Foto de perfil'),
           ),
           body: SafeArea(
+            // Widget especial: SingleChildScrollView.
+            // Mantem toda a tela rolavel se o teclado, barra do sistema ou
+            // celular pequeno reduzirem o espaco vertical.
             child: SingleChildScrollView(
               padding: const EdgeInsets.fromLTRB(18, 18, 18, 28),
               child: Column(
@@ -63,6 +70,8 @@ class _ProfilePhotoScreenState extends State<ProfilePhotoScreen> {
                         children: [
                           // Bloco 9 - avatar grande.
                           // Se nao ha foto, mostra iniciais; se ha foto, mostra Image.memory.
+                          // Widget especial: CircleAvatar.
+                          // Cria o preview circular da foto do perfil.
                           CircleAvatar(
                             key: ValueKey(
                               'profile-photo-avatar-${avatarData?.fingerprint ?? initials}-$avatarVersion',
@@ -81,7 +90,13 @@ class _ProfilePhotoScreenState extends State<ProfilePhotoScreen> {
                                   )
                                 // Bloco 9.2 - foto real vinda dos bytes do banco.
                                 : ClipOval(
+                                    // Widget especial: ClipOval.
+                                    // Recorta a imagem em formato circular para
+                                    // encaixar perfeitamente dentro do avatar.
                                     child: Image.memory(
+                                      // Widget especial: Image.memory.
+                                      // Renderiza uma imagem usando bytes em memoria,
+                                      // nao um arquivo cacheado.
                                       avatarData.bytes,
                                       key: ValueKey(
                                         'profile-photo-avatar-image-${avatarData.fingerprint}-$avatarVersion',
@@ -120,6 +135,8 @@ class _ProfilePhotoScreenState extends State<ProfilePhotoScreen> {
                   ),
                   const SizedBox(height: 18),
                   // Bloco 12 - botao que abre a camera.
+                  // Widget especial: ElevatedButton.icon.
+                  // Botao de acao principal com icone + texto. Aqui abre a camera.
                   ElevatedButton.icon(
                     onPressed: _isCapturing || user == null
                         ? null
@@ -129,6 +146,9 @@ class _ProfilePhotoScreenState extends State<ProfilePhotoScreen> {
                         ? const SizedBox(
                             width: 18,
                             height: 18,
+                            // Widget especial: CircularProgressIndicator.
+                            // Indicador de carregamento circular usado enquanto
+                            // a foto esta sendo capturada/salva.
                             child: CircularProgressIndicator(strokeWidth: 2),
                           )
                         : const Icon(Icons.camera_alt_outlined),
@@ -147,6 +167,9 @@ class _ProfilePhotoScreenState extends State<ProfilePhotoScreen> {
                   const SizedBox(height: 12),
                   // Bloco 13 - botao que remove a foto atual.
                   // Fica desabilitado se nao existe foto para remover.
+                  // Widget especial: OutlinedButton.icon.
+                  // Botao secundario com borda, ideal para acao menos principal
+                  // como remover foto.
                   OutlinedButton.icon(
                     onPressed: _isRemoving || avatarData == null || user == null
                         ? null

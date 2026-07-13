@@ -1,71 +1,83 @@
 # Gabarita App
 
-Aplicativo Flutter educacional para resolver questoes, acompanhar desempenho e demonstrar uso de recursos nativos do celular.
+Aplicativo educacional em Flutter para estudar questoes do ENEM de forma offline, criar simulados, acompanhar estatisticas e demonstrar recursos nativos do celular.
 
-## Entrega implementada
+## Resumo
 
-- SQLite local com tabelas normalizadas para `questions`, `question_alternatives`, `attempts`, `study_sessions`, `user_stats`, `study_progress`, `favorite_questions`, `study_places`, historico de simulados e `app_settings`.
-- Importacao ENEM 100% offline a partir de JSONs empacotados em `assets/data/enem/`.
-- Simulados misturam automaticamente questoes textuais de varios anos do ENEM.
-- Limpeza do banco remove duplicadas, incompletas e questoes que dependem de imagens, graficos, tabelas ou figuras.
-- Nenhuma API, Firebase, Supabase, servidor ou requisicao HTTP na execucao do app.
-- Suporte ao Chrome/Web com SQLite local via WASM/IndexedDB.
-- Layout responsivo validado em celular no modo retrato e paisagem.
-- Acelerometro: modo foco pausa o cronometro quando o celular fica virado para baixo.
-- Camera: scanner abre a camera como apoio e cadastra a questao local em formato textual.
-- GPS: tentativas salvam latitude/longitude quando permitido, agrupam coordenadas proximas como Casa/Biblioteca/Campus e exibem desempenho por local.
-- Notificacoes locais: lembrete de revisao e reforco espacado para questoes erradas.
-- Cinco widgets Android:
-  - Desafio do Dia com resposta sem abrir o app.
-  - Grafico de Performance dos ultimos 7 dias desenhado via Canvas nativo.
-  - Estatistica Rapida com acertos gerais e questoes feitas hoje.
-  - Ultimo Topico Estudado com atalho direto para um treino da categoria.
-  - Botao Scanner para abrir a camera.
-- Sete widgets Flutter adicionais, diferentes dos listados no prototipo das telas:
-  - `RefreshIndicator` no banco de questoes.
-  - `PopupMenuButton` para acoes rapidas do banco.
-  - `SegmentedButton` para periodo das estatisticas.
-  - `ExpansionTile` para detalhar locais de estudo.
-  - `FilledButton` para abrir o scanner sem usar botao flutuante.
-  - `SwitchListTile` para alternar o filtro de favoritas.
-  - `AnimatedSwitcher` para animar a contagem de questoes.
+O Gabarita foi desenvolvido com uma organizacao inspirada em Clean Architecture:
 
-## JSONs locais do ENEM
+- `domain`: entidades, contratos e casos de uso.
+- `data`: models, SQLite, leitura dos JSONs locais e repositorios.
+- `presentation`: telas e providers com `provider`.
+- `services`: camera, GPS, acelerometro, notificacoes e widgets Android.
+- `assets/data/enem`: banco local de questoes do ENEM em JSON.
 
-Os arquivos ficam em `assets/data/enem/`:
+O app nao depende de API externa para carregar questoes. Os JSONs locais sao importados para o SQLite no proprio aparelho.
 
-- `index.json` lista os anos disponiveis.
-- `enem_2009.json` ate `enem_2025.json` armazenam as questoes.
+## Funcionalidades
 
-No primeiro preparo do banco, o app importa os JSONs locais para o SQLite e grava a versao importada em `app_settings`. Depois disso, as telas e os simulados usam somente o SQLite, sem reler JSONs durante a execucao normal e sem internet.
+- Banco local de questoes do ENEM de 2009 a 2025, sem imagens.
+- Filtro por disciplina, favoritas, busca textual e ano especifico do ENEM.
+- Resolucao de questoes com correcao automatica.
+- Feedback com gabarito, XP e explicacao.
+- Simulados com quantidade configuravel por `Slider`.
+- Historico de simulados recentes.
+- Estatisticas de acerto por disciplina e desempenho semanal.
+- Revisao inteligente por abas: erradas, favoritas e recomendadas.
+- Perfil com nome, foto, meta semanal, conquistas e historico.
+- Camera para foto de perfil.
+- GPS para registrar local de estudo, quando permitido.
+- Acelerometro para ativar Modo Foco quando o celular fica virado para baixo.
+- Notificacoes locais para lembretes/revisao.
 
-## Auditoria offline
+## Documentacao
 
-- Nao existe chamada HTTP no codigo Dart/Kotlin do app.
-- Nao existe Firebase.
-- Nao existe Supabase.
-- Nao existe API externa para questoes, simulados, estatisticas ou widgets.
-- Todas as questoes usadas no app ficam no SQLite depois da importacao inicial local.
-- Simulados usam apenas SQLite, misturam anos do ENEM e evitam repeticoes ate esgotar as questoes disponiveis.
-- Favoritos, respostas, progresso, historico, estatisticas, configuracoes e ultimo estado ficam persistidos localmente.
+A documentacao detalhada esta na pasta [`docs`](docs/README.md):
 
-## Comandos de validacao
+- [Visao geral da documentacao](docs/README.md)
+- [Arquitetura do projeto](docs/arquitetura.md)
+- [Como rodar o app](docs/como-rodar.md)
+- [Banco offline do ENEM](docs/banco-offline.md)
+- [Telas e widgets utilizados](docs/telas-e-widgets.md)
+- [Fluxos principais do app](docs/fluxos-principais.md)
+- [Roteiro para apresentacao](docs/roteiro-apresentacao.md)
+- [Explicacao completa do codigo](docs/explicacao_codigo.md)
+
+## Tecnologias
+
+- Flutter
+- Dart
+- Provider
+- SQLite com `sqflite`
+- JSON local em assets
+- `sensors_plus`
+- `geolocator`
+- `image_picker`
+- `flutter_local_notifications`
+- `fl_chart`
+- `home_widget`
+
+## Comandos principais
 
 ```bash
 flutter pub get
-flutter analyze
+dart analyze
 flutter test
+flutter run
+```
+
+Para gerar APK debug:
+
+```bash
 flutter build apk --debug
 ```
 
-O APK debug fica em:
+O APK fica em:
 
 ```text
 build/app/outputs/flutter-apk/app-debug.apk
 ```
 
-O build web fica em:
+## Observacao
 
-```text
-build/web
-```
+Os arquivos Dart estao muito comentados de proposito, para facilitar a apresentacao academica. Depois da avaliacao, esses comentarios podem ser reduzidos sem alterar a regra de negocio.

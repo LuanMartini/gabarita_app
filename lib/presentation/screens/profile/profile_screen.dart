@@ -63,6 +63,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
                   // Bloco 8 - CircleAvatar obrigatorio do perfil.
+                  // Widget especial: CircleAvatar.
+                  // Exibe conteudo dentro de um circulo. No perfil ele mostra
+                  // as iniciais ou a foto do aluno.
                   CircleAvatar(
                     // Bloco 9 - chave muda quando os bytes da foto mudam.
                     key: ValueKey(
@@ -83,6 +86,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         : ClipOval(
                             // Bloco 11 - com foto, mostra bytes em memoria.
                             // Nao usamos FileImage para evitar cache de arquivo antigo.
+                            // Widget especial: Image.memory.
+                            // Mostra uma imagem a partir de bytes na memoria.
+                            // Isso e ideal para foto salva como base64 no banco.
                             child: Image.memory(
                               avatarData.bytes,
                               key: ValueKey(
@@ -173,6 +179,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         ),
                         const SizedBox(height: 12),
                         // Bloco 16 - LinearProgressIndicator exigido no perfil.
+                        // Widget especial: LinearProgressIndicator.
+                        // Mostra visualmente quanto da meta semanal foi cumprida.
                         LinearProgressIndicator(
                           value: userProvider.weeklyGoalProgress,
                           minHeight: 8,
@@ -207,6 +215,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                             children: [
                               // Bloco 18 - Chip de ofensiva.
                               Expanded(
+                                // Widget especial: Chip.
+                                // Um selo pequeno com icone/texto, usado para
+                                // mostrar conquista ou status de gamificacao.
                                 child: Chip(
                                   avatar: const Icon(
                                     Icons.local_fire_department,
@@ -223,6 +234,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                               const SizedBox(width: 8),
                               // Bloco 19 - Chip de taxa de acerto.
                               Expanded(
+                                // Widget especial: Chip.
+                                // Aqui mostra a conquista relacionada a acertos.
                                 child: Chip(
                                   avatar: const Icon(Icons.center_focus_strong),
                                   label: Text('$accuracyPercent% acerto'),
@@ -387,6 +400,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
     try {
       await context.read<UserProvider>().updateName(newName);
       if (!mounted) return;
+      // Widget especial: SnackBar.
+      // Mensagem curta que aparece na parte inferior da tela para confirmar
+      // uma acao sem abrir outra tela.
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Nome atualizado com sucesso.'),

@@ -5,9 +5,15 @@ import '../../providers/questions_provider.dart';
 import '../../providers/session_provider.dart';
 import '../../providers/user_provider.dart';
 
+// Tela: SimuladoConfigScreen.
+// Objetivo: permitir que o aluno configure um simulado antes de iniciar.
+// O aluno escolhe disciplinas por ChoiceChip, quantidade por Slider e depois
+// o app gera uma lista de questoes usando o SessionProvider.
 class SimuladoConfigScreen extends StatelessWidget {
   const SimuladoConfigScreen({super.key});
 
+  // Lista fixa de materias/areas exibidas como chips.
+  // Como e static const, ela nao e recriada toda vez que a tela redesenha.
   static const List<String> _subjects = [
     'Matematica',
     'Linguagens',
@@ -19,11 +25,17 @@ class SimuladoConfigScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Consumer escuta SessionProvider.
+    // Sempre que o usuario muda quantidade, escolhe materia ou inicia simulado,
+    // o provider chama notifyListeners e esta tela atualiza.
     return Consumer<SessionProvider>(
       builder: (context, provider, _) {
         return Scaffold(
           backgroundColor: Colors.black,
           body: SafeArea(
+            // Widget especial: SingleChildScrollView.
+            // Garante que a tela de configuracao do simulado role em aparelhos
+            // pequenos, evitando erro de "overflow" no Flutter.
             child: SingleChildScrollView(
               padding: const EdgeInsets.fromLTRB(18, 18, 18, 96),
               child: Column(
@@ -53,12 +65,19 @@ class SimuladoConfigScreen extends StatelessWidget {
                             ),
                           ),
                           const SizedBox(height: 12),
+                          // Widget especial: Wrap.
+                          // Organiza os ChoiceChips em varias linhas automaticamente.
+                          // Se faltar espaco na linha atual, o proximo chip desce.
                           Wrap(
                             spacing: 8,
                             runSpacing: 8,
                             children: _subjects.map((subject) {
                               final selected =
                                   provider.selectedSubjects.contains(subject);
+                              // Widget especial: ChoiceChip.
+                              // E um botao de escolha em formato de "tag".
+                              // Aqui ele permite selecionar/desselecionar materias
+                              // para montar o simulado.
                               return ChoiceChip(
                                 label: Text(subject),
                                 selected: selected,
@@ -76,6 +95,8 @@ class SimuladoConfigScreen extends StatelessWidget {
                                       : const Color(0xFF26364A),
                                 ),
                                 onSelected: (_) {
+                                  // Ao tocar no chip, alterna a materia no provider.
+                                  // Se ja estava selecionada, remove; se nao estava, adiciona.
                                   provider.toggleSubject(subject);
                                 },
                               );
@@ -114,6 +135,10 @@ class SimuladoConfigScreen extends StatelessWidget {
                               ),
                             ],
                           ),
+                          // Widget especial: Slider.
+                          // Controle de arrastar usado para escolher a quantidade
+                          // de questoes. min=10, max=90 e divisions=8 faz o valor
+                          // andar de 10 em 10.
                           Slider(
                             min: 10,
                             max: 90,
@@ -122,9 +147,13 @@ class SimuladoConfigScreen extends StatelessWidget {
                             activeColor: const Color(0xFF4DA3FF),
                             inactiveColor: const Color(0xFF223044),
                             label: '${provider.questionQuantity} questoes',
+                            // onChanged e chamado varias vezes enquanto o usuario arrasta.
+                            // O provider arredonda/ajusta o valor e notifica a tela.
                             onChanged: provider.setQuestionQuantity,
                           ),
                           if (provider.errorMessage != null) ...[
+                            // Mensagem de erro do provider, por exemplo quando
+                            // nao ha questoes suficientes para montar o simulado.
                             Text(
                               provider.errorMessage!,
                               style: const TextStyle(
@@ -135,6 +164,7 @@ class SimuladoConfigScreen extends StatelessWidget {
                           ],
                           ElevatedButton(
                             onPressed: provider.canStart && !provider.isLoading
+                                // So deixa iniciar quando ha estado valido e nao esta carregando.
                                 ? () => _startSimulado(context, provider)
                                 : null,
                             style: ElevatedButton.styleFrom(
@@ -165,10 +195,14 @@ class SimuladoConfigScreen extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 10),
+                  // Widget especial: ListView dentro de SingleChildScrollView.
+                  // Como a pagina ja rola, a lista fica com shrinkWrap e sem
+                  // rolagem propria para nao brigar com o scroll principal.
                   ListView(
                     shrinkWrap: true,
                     physics: const NeverScrollableScrollPhysics(),
                     children: provider.recentSimulados.isEmpty
+                        // Caso sem historico: mostra um card informativo.
                         ? const [
                             Card(
                               child: ListTile(
@@ -179,6 +213,7 @@ class SimuladoConfigScreen extends StatelessWidget {
                               ),
                             ),
                           ]
+                        // Caso com historico: gera um card para cada simulado recente.
                         : provider.recentSimulados.map((session) {
                             return Card(
                               margin: const EdgeInsets.only(bottom: 12),
@@ -227,16 +262,24 @@ class SimuladoConfigScreen extends StatelessWidget {
     BuildContext context,
     SessionProvider sessionProvider,
   ) async {
+    // Primeiro pega o id do usuario atual.
     final userId = context.read<UserProvider>().userId;
+
+    // Garante que o banco local do ENEM foi carregado antes de montar o simulado.
     await context.read<QuestionsProvider>().initializeLocalEnemBank();
     if (!context.mounted) return;
 
+    // Pede ao SessionProvider para sortear as questoes e criar a sessao.
     await sessionProvider.startSimulado(userId: userId);
     if (!context.mounted || sessionProvider.sessionQuestions.isEmpty) return;
 
+    // Entrega as questoes do simulado para o QuestionsProvider,
+    // porque a AnswerScreen le a questao atual a partir dele.
     context
         .read<QuestionsProvider>()
         .replaceQuestionSet(sessionProvider.sessionQuestions);
+
+    // Abre a tela de resposta na primeira questao do simulado.
     Navigator.of(context).pushNamed('/answer');
   }
 }

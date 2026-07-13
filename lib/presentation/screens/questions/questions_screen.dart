@@ -72,6 +72,8 @@ class _QuestionsScreenState extends State<QuestionsScreen> {
     return Consumer<QuestionsProvider>(
       builder: (context, provider, _) {
         // Bloco 8 - lista ja filtrada pelo provider.
+        // Essa lista muda quando o usuario pesquisa, escolhe disciplina,
+        // escolhe ano do ENEM ou ativa favoritas.
         final questions = provider.questions;
 
         return Scaffold(
@@ -119,6 +121,8 @@ class _QuestionsScreenState extends State<QuestionsScreen> {
                       ),
                     ),
                     onSubmitted: provider.setSearchText,
+                    // Observacao: onSubmitted roda quando o usuario confirma
+                    // no teclado. Isso evita pesquisar a cada letra e deixa a UI leve.
                   ),
                   const SizedBox(height: 14),
                   // Bloco 10 - filtro por ano/prova do ENEM.
@@ -150,6 +154,9 @@ class _QuestionsScreenState extends State<QuestionsScreen> {
                           ),
                         ),
                         // Bloco 11 - DropdownButton exigido para escolher ENEM especifico.
+                        // Widget especial: DropdownButton.
+                        // Abre uma lista suspensa para escolher uma opcao.
+                        // Aqui filtra o banco por "Todos os ENEMs" ou por um ano.
                         DropdownButton<int>(
                           value: provider.selectedExamYear ?? 0,
                           dropdownColor: const Color(0xFF0E131B),
@@ -164,6 +171,8 @@ class _QuestionsScreenState extends State<QuestionsScreen> {
                               child: Text('Todos os ENEMs'),
                             ),
                             ..._enemYears.map(
+                              // Widget especial: DropdownMenuItem.
+                              // Cada item e uma opcao dentro do DropdownButton.
                               (year) => DropdownMenuItem<int>(
                                 value: year,
                                 child: Text('ENEM $year'),
@@ -186,7 +195,11 @@ class _QuestionsScreenState extends State<QuestionsScreen> {
                     spacing: 8,
                     runSpacing: 8,
                     children: _filters.map((filter) {
+                      // selected controla apenas o visual do chip.
                       final selected = filter == _selectedFilter;
+                      // Widget especial: ChoiceChip.
+                      // Funciona como uma tag selecionavel. Aqui cada chip aplica
+                      // um filtro de disciplina na lista de questoes.
                       return ChoiceChip(
                         label: Text(filter),
                         selected: selected,
@@ -216,6 +229,9 @@ class _QuestionsScreenState extends State<QuestionsScreen> {
                   const SizedBox(height: 12),
                   // Bloco 16 - switch para mostrar apenas favoritas.
                   Card(
+                    // Widget especial: SwitchListTile.
+                    // Junta um texto, subtitulo, icone e um switch liga/desliga
+                    // na mesma linha. Aqui ativa o filtro de favoritas.
                     child: SwitchListTile(
                       value: provider.favoritesOnly,
                       activeThumbColor: const Color(0xFF4DA3FF),
@@ -247,6 +263,9 @@ class _QuestionsScreenState extends State<QuestionsScreen> {
                   ),
                   const SizedBox(height: 12),
                   // Bloco 18 - contador animado de questoes encontradas.
+                  // Widget especial: AnimatedSwitcher.
+                  // Faz uma transicao suave quando o texto muda, por exemplo
+                  // quando troca o ENEM selecionado ou ativa favoritas.
                   AnimatedSwitcher(
                     duration: const Duration(milliseconds: 220),
                     child: Text(
@@ -275,6 +294,7 @@ class _QuestionsScreenState extends State<QuestionsScreen> {
                     physics: const NeverScrollableScrollPhysics(),
                     itemCount: questions.length,
                     itemBuilder: (context, index) {
+                      // Pega a questao correspondente a posicao atual da lista.
                       final question = questions[index];
                       return _QuestionCard(
                         question: question,
@@ -309,6 +329,8 @@ class _QuestionCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Cada Card representa uma questao resumida no banco.
+    // Ao tocar no card, abrimos a AnswerScreen com essa questao selecionada.
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
       child: ListTile(
@@ -334,6 +356,7 @@ class _QuestionCard extends StatelessWidget {
         trailing: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
+            // Texto pequeno da dificuldade calculada por _difficultyLabel.
             Text(
               _difficultyLabel(question.difficulty),
               style: const TextStyle(
@@ -348,6 +371,7 @@ class _QuestionCard extends StatelessWidget {
               tooltip: 'Favoritar',
               onPressed: isFavoriteUpdating ? null : onFavorite,
               icon: Icon(
+                // Icone muda entre coracao cheio e coracao vazado.
                 question.isFavorite ? Icons.favorite : Icons.favorite_border,
                 color: question.isFavorite
                     ? const Color(0xFFEF4444)

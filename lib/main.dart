@@ -338,13 +338,22 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
 
       // Bloco 10 - IndexedStack mantem as telas vivas.
       // Isso evita perder estado quando o usuario troca de aba.
+      // Widget especial: IndexedStack.
+      // Ele guarda todas as telas montadas, mas mostra apenas a tela do indice
+      // atual. Diferente de trocar o body diretamente, ele preserva estado,
+      // scroll e providers internos de cada aba.
       body: IndexedStack(index: _selectedIndex, children: _screens),
 
       // Bloco 11 - barra de navegacao principal com cinco telas.
+      // Widget especial: BottomNavigationBar.
+      // E o menu fixo inferior do app. currentIndex define qual aba esta azul,
+      // e onTap recebe o indice clicado para trocar de tela.
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _selectedIndex,
         onTap: _selectTab,
         items: const [
+          // Widget especial: BottomNavigationBarItem.
+          // Cada item configura o icone e o texto de uma aba.
           BottomNavigationBarItem(
             icon: Icon(Icons.home_outlined),
             label: 'Home',
